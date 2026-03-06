@@ -145,7 +145,44 @@ python3 scripts/build_group_configs.py
 - webhook/token 泄露后立即重置
 - 截图分享时遮挡 key/token
 
-## 9. 常用命令
+## 9. 关键配置（对应你给的两张图）
+
+### 9.1 获取 X 的 `auth_token`（第一张图）
+
+1. 打开 `x.com` 并保持登录
+2. 打开开发者工具 -> `应用`（Application）-> `Cookie` -> `https://x.com`
+3. 找到 `auth_token`，复制它的值
+4. 填入 `.env`：
+
+```bash
+TWITTER_AUTH_TOKEN=你的auth_token
+```
+
+### 9.2 获取企业微信机器人 webhook（第二张图）
+
+1. 进入目标群聊 -> 右侧 `聊天信息`
+2. 点 `消息推送`（你图里箭头所示）
+3. 进入后配置机器人并复制 webhook URL
+4. 填入 `.env`：
+
+```bash
+WEWORK_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
+```
+
+### 9.3 开启中文翻译（当前仓库已默认开启）
+
+本仓库在 `config/config.yaml` 已设置：
+
+- `ai_translation.enabled: true`
+- `ai_translation.language: 中文`
+
+你只需要在 `.env` 填 `AI_API_KEY`，然后重启容器：
+
+```bash
+docker-compose up -d --force-recreate
+```
+
+## 10. 常用命令
 
 ```bash
 # 单路
