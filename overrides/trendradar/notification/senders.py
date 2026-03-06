@@ -657,10 +657,10 @@ def send_to_wework(
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
 
-    # 获取分批内容，预留批次头部空间
-    header_reserve = get_max_batch_header_size(header_format_type)
+    # 获取分批内容
+    # 注意：这里不再添加“第1批/第2批”批次头，避免用户侧看到批次编号文案。
     batches = split_content_func(
-        report_data, "wework", update_info, max_bytes=batch_size - header_reserve, mode=mode,
+        report_data, "wework", update_info, max_bytes=batch_size, mode=mode,
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
@@ -668,11 +668,8 @@ def send_to_wework(
         ai_stats=ai_stats,
         report_type=report_type,
     )
-
-    # 统一添加批次头部（已预留空间，不会超限）
-    batches = add_batch_headers(batches, header_format_type, batch_size)
-
-    print(f"{log_prefix}消息分为 {len(batches)} 批次发送 [{report_type}]")
+    total_batches = len(batches)
+    print(f"{log_prefix}消息分为 {total_batches} 条发送 [{report_type}]")
 
     # 逐批发送
     for i, batch_content in enumerate(batches, 1):
@@ -688,7 +685,7 @@ def send_to_wework(
             content_size = len(batch_content.encode("utf-8"))
 
         print(
-            f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
+            f"发送{log_prefix}第 {i}/{total_batches} 条，大小：{content_size} 字节 [{report_type}]"
         )
 
         try:
@@ -698,25 +695,25 @@ def send_to_wework(
             if response.status_code == 200:
                 result = response.json()
                 if result.get("errcode") == 0:
-                    print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
+                    print(f"{log_prefix}第 {i}/{total_batches} 条发送成功 [{report_type}]")
                     # 批次间间隔
-                    if i < len(batches):
+                    if i < total_batches:
                         time.sleep(batch_interval)
                 else:
                     print(
-                        f"{log_prefix}第 {i}/{len(batches)} 批次发送失败 [{report_type}]，错误：{result.get('errmsg')}"
+                        f"{log_prefix}第 {i}/{total_batches} 条发送失败 [{report_type}]，错误：{result.get('errmsg')}"
                     )
                     return False
             else:
                 print(
-                    f"{log_prefix}第 {i}/{len(batches)} 批次发送失败 [{report_type}]，状态码：{response.status_code}"
+                    f"{log_prefix}第 {i}/{total_batches} 条发送失败 [{report_type}]，状态码：{response.status_code}"
                 )
                 return False
         except Exception as e:
-            print(f"{log_prefix}第 {i}/{len(batches)} 批次发送出错 [{report_type}]：{e}")
+            print(f"{log_prefix}第 {i}/{total_batches} 条发送出错 [{report_type}]：{e}")
             return False
 
-    print(f"{log_prefix}所有 {len(batches)} 批次发送完成 [{report_type}]")
+    print(f"{log_prefix}所有 {total_batches} 条发送完成 [{report_type}]")
 
     # 文字批次发送成功后，再补发媒体内容（图片直发 + 视频卡片）
     # 注意：企业微信机器人不支持直接上传播放视频，只能发送卡片/链接。
