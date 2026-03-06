@@ -1,50 +1,55 @@
 # X AI Radar
 
-把你关注的 AI 圈 X 账号动态，自动推送到企业微信或飞书。默认只监控 AI 账号，默认关闭翻译，开箱即可先跑通。
+你关注的 AI 圈 X 账号，只要有新帖就推送到微信/飞书；每天早上 08:00 再给一条汇总。
 
-## 项目来源（基于什么开源）
+当前默认策略：
 
-这个仓库不是从零重造，核心是把现成开源方案组合并做了定制：
+- 监控范围：仅 AI 方向账号（42 个）
+- 实时提醒：每 1 分钟轮询一次，有新增就推
+- 固定汇总：每天 08:00 推送当前汇总
+- 翻译功能：默认关闭（需要时可开启）
 
-- 抓取与推送主程序：TrendRadar（镜像：`wantcat/trendradar`）
-- X 数据入口：RSSHub 的 `twitter/user/:username` 路由（镜像：`diygod/rsshub`）
-- 本仓库定制层：`overrides/trendradar/*`（媒体渲染、发送行为优化）
-- 编排方式：Docker Compose（一个命令启动整套链路）
+## 项目是怎么来的
+
+这个项目是基于开源组件组合出来的，不是从零重写：
+
+- `TrendRadar`：负责抓取结果整理、去重、调度和推送
+- `RSSHub`：提供 X 用户时间线 RSS 路由（`twitter/user/:username`）
+- `Docker Compose`：把整套服务一键启动
+- `overrides/trendradar/*`：本仓库的定制逻辑（媒体处理、推送优化）
 
 数据流：`X -> RSSHub -> TrendRadar -> 企业微信/飞书`
 
-## 现在这套能做什么
+## 小白 10 分钟上手
 
-- 监控范围：AI 圈账号（`config/config.yaml` 当前 42 个）
-- 推送内容：文字、图片、视频链接（企业微信机器人不支持消息内直接播放视频）
-- 推送策略：
-  - 有新帖就推送（增量）
-  - 每天 08:00 固定提醒一条（当前汇总）
-- 翻译能力：支持中文翻译，默认关闭；需要时再开启
+### 1. 准备环境
 
-## 小白上手（10 分钟）
+- 安装并启动 Docker Desktop
+- 能正常访问 `x.com`
+- 已有企业微信机器人 webhook 或飞书机器人 webhook
 
-### 1) 准备环境
-
-- 电脑已安装并启动 Docker Desktop
-- 能访问 GitHub、x.com、企业微信或飞书
-
-### 2) 初始化配置
+### 2. 初始化配置
 
 ```bash
 cp .env.example .env
 ```
 
-`.env` 至少填这两项：
+### 3. 必填 `.env`
+
+至少填写：
 
 - `TWITTER_AUTH_TOKEN`
-- `WEWORK_WEBHOOK_URL` 或 `FEISHU_WEBHOOK_URL`（二选一或都填）
+- `WEWORK_WEBHOOK_URL` 或 `FEISHU_WEBHOOK_URL`
 
-### 3) 获取 X 的 `auth_token`
+翻译暂时不用填（默认关闭）：
+
+- `AI_API_KEY`（可留空）
+
+### 4. 获取 `TWITTER_AUTH_TOKEN`
 
 1. 登录 `x.com`
 2. 打开开发者工具 -> Application -> Cookies -> `https://x.com`
-3. 找到 `auth_token` 并复制值
+3. 复制 `auth_token` 的值
 4. 写入 `.env`
 
 ![X auth_token Cookie screenshot](./5ba9aeb751faa9bd7f973ce330d1c77d.png)
@@ -53,9 +58,9 @@ cp .env.example .env
 TWITTER_AUTH_TOKEN=your_auth_token
 ```
 
-### 4) 配置企业微信机器人 webhook
+### 5. 配置企业微信 webhook
 
-1. 企业微信群 -> 聊天信息
+1. 进入目标群 -> 聊天信息
 2. 点击 `消息推送`
 3. 配置机器人并复制 webhook
 4. 写入 `.env`
@@ -66,56 +71,53 @@ TWITTER_AUTH_TOKEN=your_auth_token
 WEWORK_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
 ```
 
-### 5) 一键检查 + 启动
+### 6. 自检并启动
 
 ```bash
 ./scripts/doctor.sh
 ./scripts/up.sh
 ```
 
-### 6) 看运行日志
+### 7. 看日志确认是否正常
 
 ```bash
 docker logs -f x-trendradar
 ```
 
-如果你看到 `开始抓取 42 个 RSS 源`，说明主流程已经跑起来了。
+看到下面类似日志说明已正常运行：
 
-## 推送时效与延迟说明
+- `生成的crontab内容: */1 * * * * ...`
+- `[RSS] 开始抓取 42 个 RSS 源`
 
-- 默认轮询频率：每 5 分钟一次（`CRON_SCHEDULE=*/5 * * * *`）
-- 默认启动即执行：容器启动后会先立即跑一次（`IMMEDIATE_RUN=true`）
-- 08:00 固定提醒：由 `config/timeline.yaml` 的时间线控制
-- 常见延迟来源：
-  - X 或 RSSHub 限流/超时
-  - 网络波动
-  - 企业微信/飞书通道限速
+## 你现在会收到什么推送
 
-## 如何开启翻译（默认关闭）
+- 某个 AI 账号发新帖：尽快推送（按 1 分钟轮询）
+- 每天 08:00：固定推一条当前汇总
+- 图片：可直接推送图片消息
+- 视频：以链接/卡片方式推送（平台接口限制）
 
-1. 在 `.env` 填写 `AI_API_KEY`
+说明：如果同一分钟内有多条新帖，可能会在一轮里一起发出，但不会显示“第1批/第2批”这种批次标题。
+
+## 推送节奏与延迟说明
+
+- 轮询频率：`CRON_SCHEDULE=*/1 * * * *`
+- 启动即跑：`IMMEDIATE_RUN=true`
+- 早 8 汇总：`config/timeline.yaml` 的 `custom.morning_digest`
+
+可能影响时效的因素：
+
+- X/RSSHub 接口超时或限流
+- 本机网络波动
+- 推送平台通道限速
+
+## 开启翻译（可选）
+
+1. `.env` 填入 `AI_API_KEY`
 2. 把 `config/config.yaml` 中 `ai_translation.enabled` 改为 `true`
-3. 重启容器：
+3. 重启：
 
 ```bash
 docker compose up -d --force-recreate trendradar
-```
-
-## 目录说明
-
-```text
-.
-├── config/
-│   ├── config.yaml          # 主配置（账号列表、翻译开关等）
-│   ├── timeline.yaml        # 时间线（08:00 固定提醒）
-│   └── feed_groups.json     # 分组配置（当前仅 ai）
-├── overrides/               # 对 TrendRadar 的功能覆盖
-├── scripts/
-│   ├── doctor.sh            # 启动前体检
-│   ├── up.sh                # 单实例启动
-│   ├── build_group_configs.py
-│   └── up-groups.sh
-└── docker-compose.yml
 ```
 
 ## 常用命令
@@ -127,9 +129,26 @@ docker compose up -d --force-recreate trendradar
 # 停止
 docker compose down
 
-# 看容器状态
+# 查看状态
 docker compose ps
 
-# 只看主服务日志
+# 查看日志
 docker logs -f x-trendradar
+```
+
+## 目录说明
+
+```text
+.
+├── config/
+│   ├── config.yaml
+│   ├── timeline.yaml
+│   └── feed_groups.json
+├── overrides/
+├── scripts/
+│   ├── doctor.sh
+│   ├── up.sh
+│   ├── up-groups.sh
+│   └── build_group_configs.py
+└── docker-compose.yml
 ```
