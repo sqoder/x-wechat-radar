@@ -1,117 +1,162 @@
-# X Radar: X(Twitter) -> 企业微信/飞书推送
+# X WeChat Radar
 
-把你关注的 X 账号动态自动推送到微信/飞书，减少手动刷 X 的时间。
+把你关注的 X 账号动态（文字/图片/视频链接）自动推送到企业微信或飞书。
 
-数据链路：
+> 核心目标：不打开 X，也能在消息工具里第一时间看更新。
 
-`X -> RSSHub -> TrendRadar -> 企业微信/飞书`
+## 1. 功能概览
 
-## 功能
+- 支持 144+ X 账号监控（通过 RSSHub `twitter/user/<username>`）
+- 支持企业微信、飞书推送
+- 支持媒体增强：
+  - 图片：企业微信直接推图片消息
+  - 视频：企业微信推送视频卡片/链接（机器人 API 不支持消息内直接播放）
+- 支持调度：
+  - 全天增量推送（有人发新帖就提醒）
+  - 每天 08:00 固定提醒（当前汇总）
+- 支持分组优先推送（AI / Politics / Invest 三路）
 
-- 支持多 X 账号订阅（RSSHub `twitter/user/<username>`）
-- 支持企业微信与飞书推送
-- 支持媒体补发：
-  - 图片：企业微信会直接推图片消息
-  - 视频：企业微信会推送视频卡片/链接（机器人接口不支持消息内直接播放视频）
-- 调度支持：
-  - 全天增量提醒（有新帖就推）
-  - 每天早上 08:00 固定提醒一次（当前汇总）
+## 2. 架构
 
-## 目录结构
+```text
+X (Twitter)
+   ↓
+RSSHub (twitter/user/:username)
+   ↓
+TrendRadar (抓取 + 去重 + 调度)
+   ↓
+企业微信 / 飞书
+```
+
+## 3. 目录说明
 
 ```text
 .
-├── config/                    # TrendRadar 主配置与时间线
-├── overrides/                 # 对上游 TrendRadar 的本地覆盖
-├── scripts/                   # 启动与自检脚本
-├── docker-compose.yml         # 一键启动
-├── .env.example               # 环境变量模板
-└── README.md
+├── config/
+│   ├── config.yaml              # 主配置（全量监控）
+│   ├── timeline.yaml            # 时间线（8点固定提醒 + 全天增量）
+│   └── feed_groups.json         # 分组路由定义（AI/Politics/Invest）
+├── overrides/                   # 对上游 TrendRadar 的覆盖（媒体解析与发送增强）
+├── scripts/
+│   ├── doctor.sh                # 基础自检
+│   ├── up.sh                    # 单路启动
+│   ├── build_group_configs.py   # 生成分组配置
+│   └── up-groups.sh             # 分组三路启动
+├── docker-compose.yml
+└── .env.example
 ```
 
-## 快速开始
+## 4. 快速开始（单路模式）
 
-1. 准备环境变量
+### 4.1 准备
 
 ```bash
 cd /Users/wangxinglin/Desktop/x-wechat-radar
 cp .env.example .env
 ```
 
-填写 `.env`：
+必填 `.env`：
 
-- `TWITTER_AUTH_TOKEN`：登录 x.com 后 Cookie 里的 `auth_token`
-- `WEWORK_WEBHOOK_URL`：企业微信机器人 webhook（或配置 `FEISHU_WEBHOOK_URL`）
-- `AI_API_KEY`：可选，仅开启翻译/AI 分析时需要
+- `TWITTER_AUTH_TOKEN`：登录 x.com 后 cookie 里的 `auth_token`
+- `WEWORK_WEBHOOK_URL` 或 `FEISHU_WEBHOOK_URL`
 
-2. 配置要追踪的账号
-
-编辑 `config/config.yaml` 的 `rss.feeds`。
-
-```yaml
-- id: "x-openai"
-  name: "X / OpenAI"
-  url: "http://rsshub:1200/twitter/user/OpenAI"
-```
-
-3. 自检
+### 4.2 自检
 
 ```bash
 ./scripts/doctor.sh
 ```
 
-4. 启动
+### 4.3 启动
 
 ```bash
 ./scripts/up.sh
 ```
 
-5. 查看日志
+查看日志：
 
 ```bash
 docker logs -f x-trendradar
 ```
 
-## 当前默认策略（已配置）
+## 5. 分组优先推送（AI / Politics / Invest）
 
-已在 `config/timeline.yaml` 里设置：
+这个模式会启动 3 个 TrendRadar 实例，分别监控不同账号组。
 
-- 默认：`incremental`，全天有新增就推送
-- `08:00-08:04`：固定提醒窗口，`current` 汇总，仅推送一次
+### 5.1 配置 webhook
 
-## 安全说明
+你可以给每组单独 webhook：
 
-- `.env` 与 `output/` 不应提交到 GitHub
-- 如果 webhook 或 token 泄露，请立即重置
-- 不要在 issue/日志/截图中暴露 webhook 完整 URL
+- `WEWORK_WEBHOOK_URL_AI`
+- `WEWORK_WEBHOOK_URL_POLITICS`
+- `WEWORK_WEBHOOK_URL_INVEST`
 
-## 云端部署建议
+或留空，`up-groups.sh` 会自动回退到全局 `WEWORK_WEBHOOK_URL`（飞书同理）。
 
-本地部署时，电脑关机/睡眠后不会推送。要 24 小时稳定推送，建议部署到云服务器（Docker 常驻）。
-
-最小方案：
-
-1. 准备 Linux 云主机（2C2G 即可）
-2. 安装 Docker / Docker Compose
-3. 拉取本仓库并配置 `.env`
-4. `docker compose up -d`
-5. 配置开机自启（如 systemd）
-
-## 常见问题
-
-1. 企业微信只看到链接没有图片？
-- 先确认你使用的是本仓库当前覆盖版（`overrides/trendradar/notification/senders.py` 已挂载）。
-
-2. 没有收到推送？
-- 检查 webhook 是否可用
-- 检查 `docker logs -f x-trendradar`
-- 检查 `.env` 的 `TWITTER_AUTH_TOKEN` 是否过期
-
-3. 为什么视频不是直接播放？
-- 企业微信机器人 API 本身不支持直接发送可播放视频消息，当前为卡片/链接方案。
-
-## 停止服务
+### 5.2 启动
 
 ```bash
+./scripts/up-groups.sh
+```
+
+日志：
+
+```bash
+docker logs -f x-trendradar-ai
+docker logs -f x-trendradar-politics
+docker logs -f x-trendradar-invest
+```
+
+### 5.3 修改分组
+
+编辑 `config/feed_groups.json`，然后重跑：
+
+```bash
+python3 scripts/build_group_configs.py
+./scripts/up-groups.sh
+```
+
+## 6. 时间策略（当前默认）
+
+- 默认时段：`incremental`（全天新帖实时提醒）
+- `08:00-08:04`：`current`（只发一次早间汇总）
+
+配置文件：`config/timeline.yaml`
+
+## 7. 常见问题
+
+### Q1: 为什么视频不是直接在微信里播放？
+
+企业微信机器人接口限制，不支持直接发送可播放视频消息。当前是视频卡片/链接方案。
+
+### Q2: 电脑关机后还能推送吗？
+
+不能。本地 Docker 停止后就不会抓取与推送。  
+要 24h 稳定运行，建议部署到云服务器。
+
+### Q3: 推送没到？
+
+1. 检查 webhook 是否有效
+2. 检查 `TWITTER_AUTH_TOKEN` 是否过期
+3. 看容器日志是否报错
+
+## 8. 安全建议
+
+- 不要提交 `.env`、数据库、日志
+- webhook/token 泄露后立即重置
+- 截图分享时遮挡 key/token
+
+## 9. 常用命令
+
+```bash
+# 单路
+./scripts/up.sh
+
+# 分组三路
+./scripts/up-groups.sh
+
+# 停止全部
 docker-compose down
+
+# 查看容器
+docker-compose ps
 ```

@@ -39,3 +39,84 @@ services:
       - WEBSERVER_PORT=${WEBSERVER_PORT:-8080}
     ports:
       - "127.0.0.1:${WEBSERVER_PORT:-8080}:${WEBSERVER_PORT:-8080}"
+
+  trendradar-ai:
+    image: wantcat/trendradar:latest
+    container_name: x-trendradar-ai
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+    profiles: ["grouped"]
+    volumes:
+      - ./generated-configs/ai:/app/config:ro
+      - ./output/groups/ai:/app/output
+      - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
+      - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL_AI:-}
+      - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL_AI:-}
+      - WEWORK_MSG_TYPE=${WEWORK_MSG_TYPE:-text}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-deepseek/deepseek-chat}
+      - AI_API_BASE=${AI_API_BASE:-}
+      - AI_ANALYSIS_ENABLED=${AI_ANALYSIS_ENABLED:-false}
+      - RUN_MODE=cron
+      - CRON_SCHEDULE=${CRON_SCHEDULE_AI:-1/5 * * * *}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN_GROUPS:-false}
+      - ENABLE_WEBSERVER=false
+
+  trendradar-politics:
+    image: wantcat/trendradar:latest
+    container_name: x-trendradar-politics
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+    profiles: ["grouped"]
+    volumes:
+      - ./generated-configs/politics:/app/config:ro
+      - ./output/groups/politics:/app/output
+      - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
+      - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL_POLITICS:-}
+      - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL_POLITICS:-}
+      - WEWORK_MSG_TYPE=${WEWORK_MSG_TYPE:-text}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-deepseek/deepseek-chat}
+      - AI_API_BASE=${AI_API_BASE:-}
+      - AI_ANALYSIS_ENABLED=${AI_ANALYSIS_ENABLED:-false}
+      - RUN_MODE=cron
+      - CRON_SCHEDULE=${CRON_SCHEDULE_POLITICS:-2/5 * * * *}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN_GROUPS:-false}
+      - ENABLE_WEBSERVER=false
+
+  trendradar-invest:
+    image: wantcat/trendradar:latest
+    container_name: x-trendradar-invest
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+    profiles: ["grouped"]
+    volumes:
+      - ./generated-configs/invest:/app/config:ro
+      - ./output/groups/invest:/app/output
+      - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
+      - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL_INVEST:-}
+      - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL_INVEST:-}
+      - WEWORK_MSG_TYPE=${WEWORK_MSG_TYPE:-text}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-deepseek/deepseek-chat}
+      - AI_API_BASE=${AI_API_BASE:-}
+      - AI_ANALYSIS_ENABLED=${AI_ANALYSIS_ENABLED:-false}
+      - RUN_MODE=cron
+      - CRON_SCHEDULE=${CRON_SCHEDULE_INVEST:-3/5 * * * *}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN_GROUPS:-false}
+      - ENABLE_WEBSERVER=false

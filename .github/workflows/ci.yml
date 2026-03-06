@@ -25,12 +25,14 @@ jobs:
         run: |
           bash -n scripts/doctor.sh
           bash -n scripts/up.sh
+          bash -n scripts/up-groups.sh
 
       - name: Python syntax check
         run: |
           python -m py_compile overrides/trendradar/crawler/rss/parser.py
           python -m py_compile overrides/trendradar/notification/renderer.py
           python -m py_compile overrides/trendradar/notification/senders.py
+          python -m py_compile scripts/build_group_configs.py
 
       - name: YAML sanity check
         run: |
@@ -74,4 +76,13 @@ jobs:
       - name: Docker Compose config check
         run: |
           cp .env.example .env
+          python scripts/build_group_configs.py
           docker compose config >/dev/null
+
+      - name: Docker Compose grouped profile check
+        run: |
+          cp .env.example .env
+          export WEWORK_WEBHOOK_URL_AI=https://example.invalid/ai
+          export WEWORK_WEBHOOK_URL_POLITICS=https://example.invalid/politics
+          export WEWORK_WEBHOOK_URL_INVEST=https://example.invalid/invest
+          COMPOSE_PROFILES=grouped docker compose config >/dev/null

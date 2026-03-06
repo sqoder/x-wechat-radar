@@ -91,20 +91,582 @@ rss:
   # - 正整数：覆盖全局设置，只推送此天数内的文章
   # - 0：禁用此频道的新鲜度过滤，推送所有文章
   feeds:
-    # X(Twitter) 账号 RSS（由本地 RSSHub 生成）
-    # 格式: http://rsshub:1200/twitter/user/<用户名>
-    # 例: https://x.com/OpenAI -> http://rsshub:1200/twitter/user/OpenAI
-    - id: "x-openai"
-      name: "X / OpenAI"
-      url: "http://rsshub:1200/twitter/user/OpenAI"
+    - id: "x-sama"
+      name: "X / @sama"
+      url: "http://rsshub:1200/twitter/user/sama"
 
-    - id: "x-anthropic"
-      name: "X / AnthropicAI"
-      url: "http://rsshub:1200/twitter/user/AnthropicAI"
+    - id: "x-gdb"
+      name: "X / @gdb"
+      url: "http://rsshub:1200/twitter/user/gdb"
 
-    - id: "x-google-deepmind"
-      name: "X / Google DeepMind"
-      url: "http://rsshub:1200/twitter/user/GoogleDeepMind"
+    - id: "x-ilyasut"
+      name: "X / @ilyasut"
+      url: "http://rsshub:1200/twitter/user/ilyasut"
+
+    - id: "x-karpathy"
+      name: "X / @karpathy"
+      url: "http://rsshub:1200/twitter/user/karpathy"
+
+    - id: "x-johnschulman2"
+      name: "X / @johnschulman2"
+      url: "http://rsshub:1200/twitter/user/johnschulman2"
+
+    - id: "x-woj-zaremba"
+      name: "X / @woj_zaremba"
+      url: "http://rsshub:1200/twitter/user/woj_zaremba"
+
+    - id: "x-miramurati"
+      name: "X / @miramurati"
+      url: "http://rsshub:1200/twitter/user/miramurati"
+
+    - id: "x-alexwei"
+      name: "X / @alexwei_"
+      url: "http://rsshub:1200/twitter/user/alexwei_"
+
+    - id: "x-mileskwang"
+      name: "X / @MilesKWang"
+      url: "http://rsshub:1200/twitter/user/MilesKWang"
+
+    - id: "x-lilianweng"
+      name: "X / @lilianweng"
+      url: "http://rsshub:1200/twitter/user/lilianweng"
+
+    - id: "x-ylecun"
+      name: "X / @ylecun"
+      url: "http://rsshub:1200/twitter/user/ylecun"
+
+    - id: "x-geoffreyhinton"
+      name: "X / @geoffreyhinton"
+      url: "http://rsshub:1200/twitter/user/geoffreyhinton"
+
+    - id: "x-bengioy"
+      name: "X / @bengioy"
+      url: "http://rsshub:1200/twitter/user/bengioy"
+
+    - id: "x-andrewyng"
+      name: "X / @AndrewYNg"
+      url: "http://rsshub:1200/twitter/user/AndrewYNg"
+
+    - id: "x-drfeifei"
+      name: "X / @drfeifei"
+      url: "http://rsshub:1200/twitter/user/drfeifei"
+
+    - id: "x-goodfellow-ian"
+      name: "X / @goodfellow_ian"
+      url: "http://rsshub:1200/twitter/user/goodfellow_ian"
+
+    - id: "x-garymarcus"
+      name: "X / @GaryMarcus"
+      url: "http://rsshub:1200/twitter/user/GaryMarcus"
+
+    - id: "x-peternorvig"
+      name: "X / @PeterNorvig"
+      url: "http://rsshub:1200/twitter/user/PeterNorvig"
+
+    - id: "x-raykurzweil"
+      name: "X / @RayKurzweil"
+      url: "http://rsshub:1200/twitter/user/RayKurzweil"
+
+    - id: "x-lexfridman"
+      name: "X / @lexfridman"
+      url: "http://rsshub:1200/twitter/user/lexfridman"
+
+    - id: "x-bengoertzel"
+      name: "X / @bengoertzel"
+      url: "http://rsshub:1200/twitter/user/bengoertzel"
+
+    - id: "x-tegmark"
+      name: "X / @tegmark"
+      url: "http://rsshub:1200/twitter/user/tegmark"
+
+    - id: "x-nickbostrom"
+      name: "X / @nickbostrom"
+      url: "http://rsshub:1200/twitter/user/nickbostrom"
+
+    - id: "x-demishassabis"
+      name: "X / @demishassabis"
+      url: "http://rsshub:1200/twitter/user/demishassabis"
+
+    - id: "x-shanelegg"
+      name: "X / @ShaneLegg"
+      url: "http://rsshub:1200/twitter/user/ShaneLegg"
+
+    - id: "x-mustafasuleyman"
+      name: "X / @mustafasuleyman"
+      url: "http://rsshub:1200/twitter/user/mustafasuleyman"
+
+    - id: "x-nandodf"
+      name: "X / @NandoDF"
+      url: "http://rsshub:1200/twitter/user/NandoDF"
+
+    - id: "x-silvertakes"
+      name: "X / @SilverTakes"
+      url: "http://rsshub:1200/twitter/user/SilverTakes"
+
+    - id: "x-kka"
+      name: "X / @kka"
+      url: "http://rsshub:1200/twitter/user/kka"
+
+    - id: "x-oriolvinyalsml"
+      name: "X / @OriolVinyalsML"
+      url: "http://rsshub:1200/twitter/user/OriolVinyalsML"
+
+    - id: "x-jeffdean"
+      name: "X / @JeffDean"
+      url: "http://rsshub:1200/twitter/user/JeffDean"
+
+    - id: "x-quocleix"
+      name: "X / @quocleix"
+      url: "http://rsshub:1200/twitter/user/quocleix"
+
+    - id: "x-noamshazeer"
+      name: "X / @noamshazeer"
+      url: "http://rsshub:1200/twitter/user/noamshazeer"
+
+    - id: "x-alec-rad"
+      name: "X / @alec_rad"
+      url: "http://rsshub:1200/twitter/user/alec_rad"
+
+    - id: "x-darioamodei"
+      name: "X / @darioamodei"
+      url: "http://rsshub:1200/twitter/user/darioamodei"
+
+    - id: "x-ch402"
+      name: "X / @ch402"
+      url: "http://rsshub:1200/twitter/user/ch402"
+
+    - id: "x-sebruder"
+      name: "X / @sebruder"
+      url: "http://rsshub:1200/twitter/user/sebruder"
+
+    - id: "x-thom-wolf"
+      name: "X / @Thom_Wolf"
+      url: "http://rsshub:1200/twitter/user/Thom_Wolf"
+
+    - id: "x-clementdelangue"
+      name: "X / @ClementDelangue"
+      url: "http://rsshub:1200/twitter/user/ClementDelangue"
+
+    - id: "x-linus-torvalds"
+      name: "X / @Linus__Torvalds"
+      url: "http://rsshub:1200/twitter/user/Linus__Torvalds"
+
+    - id: "x-gvanrossum"
+      name: "X / @gvanrossum"
+      url: "http://rsshub:1200/twitter/user/gvanrossum"
+
+    - id: "x-brendaneich"
+      name: "X / @BrendanEich"
+      url: "http://rsshub:1200/twitter/user/BrendanEich"
+
+    - id: "x-dan-abramov"
+      name: "X / @dan_abramov"
+      url: "http://rsshub:1200/twitter/user/dan_abramov"
+
+    - id: "x-kentcdodds"
+      name: "X / @kentcdodds"
+      url: "http://rsshub:1200/twitter/user/kentcdodds"
+
+    - id: "x-t3dotgg"
+      name: "X / @t3dotgg"
+      url: "http://rsshub:1200/twitter/user/t3dotgg"
+
+    - id: "x-rauchg"
+      name: "X / @rauchg"
+      url: "http://rsshub:1200/twitter/user/rauchg"
+
+    - id: "x-addyosmani"
+      name: "X / @addyosmani"
+      url: "http://rsshub:1200/twitter/user/addyosmani"
+
+    - id: "x-youyuxi"
+      name: "X / @youyuxi"
+      url: "http://rsshub:1200/twitter/user/youyuxi"
+
+    - id: "x-clattner-llvm"
+      name: "X / @clattner_llvm"
+      url: "http://rsshub:1200/twitter/user/clattner_llvm"
+
+    - id: "x-ryanflorence"
+      name: "X / @ryanflorence"
+      url: "http://rsshub:1200/twitter/user/ryanflorence"
+
+    - id: "x-tjholowaychuk"
+      name: "X / @tjholowaychuk"
+      url: "http://rsshub:1200/twitter/user/tjholowaychuk"
+
+    - id: "x-sindresorhus"
+      name: "X / @sindresorhus"
+      url: "http://rsshub:1200/twitter/user/sindresorhus"
+
+    - id: "x-paulg"
+      name: "X / @paulg"
+      url: "http://rsshub:1200/twitter/user/paulg"
+
+    - id: "x-pmarca"
+      name: "X / @pmarca"
+      url: "http://rsshub:1200/twitter/user/pmarca"
+
+    - id: "x-naval"
+      name: "X / @naval"
+      url: "http://rsshub:1200/twitter/user/naval"
+
+    - id: "x-eladgil"
+      name: "X / @eladgil"
+      url: "http://rsshub:1200/twitter/user/eladgil"
+
+    - id: "x-bgurley"
+      name: "X / @bgurley"
+      url: "http://rsshub:1200/twitter/user/bgurley"
+
+    - id: "x-jason"
+      name: "X / @jason"
+      url: "http://rsshub:1200/twitter/user/jason"
+
+    - id: "x-davidsacks"
+      name: "X / @DavidSacks"
+      url: "http://rsshub:1200/twitter/user/DavidSacks"
+
+    - id: "x-chamath"
+      name: "X / @chamath"
+      url: "http://rsshub:1200/twitter/user/chamath"
+
+    - id: "x-timdraper"
+      name: "X / @TimDraper"
+      url: "http://rsshub:1200/twitter/user/TimDraper"
+
+    - id: "x-cdixon"
+      name: "X / @cdixon"
+      url: "http://rsshub:1200/twitter/user/cdixon"
+
+    - id: "x-bhorowitz"
+      name: "X / @bhorowitz"
+      url: "http://rsshub:1200/twitter/user/bhorowitz"
+
+    - id: "x-fredwilson"
+      name: "X / @fredwilson"
+      url: "http://rsshub:1200/twitter/user/fredwilson"
+
+    - id: "x-paultoo"
+      name: "X / @paultoo"
+      url: "http://rsshub:1200/twitter/user/paultoo"
+
+    - id: "x-reidhoffman"
+      name: "X / @reidhoffman"
+      url: "http://rsshub:1200/twitter/user/reidhoffman"
+
+    - id: "x-mcuban"
+      name: "X / @mcuban"
+      url: "http://rsshub:1200/twitter/user/mcuban"
+
+    - id: "x-raydalio"
+      name: "X / @RayDalio"
+      url: "http://rsshub:1200/twitter/user/RayDalio"
+
+    - id: "x-cathiedwood"
+      name: "X / @CathieDWood"
+      url: "http://rsshub:1200/twitter/user/CathieDWood"
+
+    - id: "x-billackman"
+      name: "X / @BillAckman"
+      url: "http://rsshub:1200/twitter/user/BillAckman"
+
+    - id: "x-carl-c-icahn"
+      name: "X / @Carl_C_Icahn"
+      url: "http://rsshub:1200/twitter/user/Carl_C_Icahn"
+
+    - id: "x-scaramucci"
+      name: "X / @Scaramucci"
+      url: "http://rsshub:1200/twitter/user/Scaramucci"
+
+    - id: "x-peterthiel"
+      name: "X / @peterthiel"
+      url: "http://rsshub:1200/twitter/user/peterthiel"
+
+    - id: "x-balajis"
+      name: "X / @balajis"
+      url: "http://rsshub:1200/twitter/user/balajis"
+
+    - id: "x-elonmusk"
+      name: "X / @elonmusk"
+      url: "http://rsshub:1200/twitter/user/elonmusk"
+
+    - id: "x-jack"
+      name: "X / @jack"
+      url: "http://rsshub:1200/twitter/user/jack"
+
+    - id: "x-satyanadella"
+      name: "X / @satyanadella"
+      url: "http://rsshub:1200/twitter/user/satyanadella"
+
+    - id: "x-sundarpichai"
+      name: "X / @sundarpichai"
+      url: "http://rsshub:1200/twitter/user/sundarpichai"
+
+    - id: "x-tim-cook"
+      name: "X / @tim_cook"
+      url: "http://rsshub:1200/twitter/user/tim_cook"
+
+    - id: "x-jensenhuang"
+      name: "X / @jensenhuang"
+      url: "http://rsshub:1200/twitter/user/jensenhuang"
+
+    - id: "x-lisasu"
+      name: "X / @LisaSu"
+      url: "http://rsshub:1200/twitter/user/LisaSu"
+
+    - id: "x-finkd"
+      name: "X / @finkd"
+      url: "http://rsshub:1200/twitter/user/finkd"
+
+    - id: "x-bchesky"
+      name: "X / @bchesky"
+      url: "http://rsshub:1200/twitter/user/bchesky"
+
+    - id: "x-patrickc"
+      name: "X / @patrickc"
+      url: "http://rsshub:1200/twitter/user/patrickc"
+
+    - id: "x-collision"
+      name: "X / @collision"
+      url: "http://rsshub:1200/twitter/user/collision"
+
+    - id: "x-sahilbloom"
+      name: "X / @SahilBloom"
+      url: "http://rsshub:1200/twitter/user/SahilBloom"
+
+    - id: "x-codie-sanchez"
+      name: "X / @Codie_Sanchez"
+      url: "http://rsshub:1200/twitter/user/Codie_Sanchez"
+
+    - id: "x-alexhormozi"
+      name: "X / @AlexHormozi"
+      url: "http://rsshub:1200/twitter/user/AlexHormozi"
+
+    - id: "x-thedankoe"
+      name: "X / @thedankoe"
+      url: "http://rsshub:1200/twitter/user/thedankoe"
+
+    - id: "x-thejustinwelsh"
+      name: "X / @thejustinwelsh"
+      url: "http://rsshub:1200/twitter/user/thejustinwelsh"
+
+    - id: "x-kofmanmichael"
+      name: "X / @KofmanMichael"
+      url: "http://rsshub:1200/twitter/user/KofmanMichael"
+
+    - id: "x-ralee85"
+      name: "X / @RALee85"
+      url: "http://rsshub:1200/twitter/user/RALee85"
+
+    - id: "x-phillipspobrien"
+      name: "X / @PhillipsPOBrien"
+      url: "http://rsshub:1200/twitter/user/PhillipsPOBrien"
+
+    - id: "x-anderspuck"
+      name: "X / @anderspuck"
+      url: "http://rsshub:1200/twitter/user/anderspuck"
+
+    - id: "x-drmikeclarke"
+      name: "X / @DrMikeClarke"
+      url: "http://rsshub:1200/twitter/user/DrMikeClarke"
+
+    - id: "x-daxe"
+      name: "X / @daxe"
+      url: "http://rsshub:1200/twitter/user/daxe"
+
+    - id: "x-fukuyamafrancis"
+      name: "X / @FukuyamaFrancis"
+      url: "http://rsshub:1200/twitter/user/FukuyamaFrancis"
+
+    - id: "x-ianbremmer"
+      name: "X / @ianbremmer"
+      url: "http://rsshub:1200/twitter/user/ianbremmer"
+
+    - id: "x-fareedzakaria"
+      name: "X / @FareedZakaria"
+      url: "http://rsshub:1200/twitter/user/FareedZakaria"
+
+    - id: "x-anneapplebaum"
+      name: "X / @anneapplebaum"
+      url: "http://rsshub:1200/twitter/user/anneapplebaum"
+
+    - id: "x-kasparov63"
+      name: "X / @Kasparov63"
+      url: "http://rsshub:1200/twitter/user/Kasparov63"
+
+    - id: "x-benshapiro"
+      name: "X / @benshapiro"
+      url: "http://rsshub:1200/twitter/user/benshapiro"
+
+    - id: "x-jordanbpeterson"
+      name: "X / @jordanbpeterson"
+      url: "http://rsshub:1200/twitter/user/jordanbpeterson"
+
+    - id: "x-tuckercarlson"
+      name: "X / @TuckerCarlson"
+      url: "http://rsshub:1200/twitter/user/TuckerCarlson"
+
+    - id: "x-realdonaldtrump"
+      name: "X / @realDonaldTrump"
+      url: "http://rsshub:1200/twitter/user/realDonaldTrump"
+
+    - id: "x-zelenskyyua"
+      name: "X / @ZelenskyyUa"
+      url: "http://rsshub:1200/twitter/user/ZelenskyyUa"
+
+    - id: "x-barackobama"
+      name: "X / @BarackObama"
+      url: "http://rsshub:1200/twitter/user/BarackObama"
+
+    - id: "x-joebiden"
+      name: "X / @JoeBiden"
+      url: "http://rsshub:1200/twitter/user/JoeBiden"
+
+    - id: "x-narendramodi"
+      name: "X / @narendramodi"
+      url: "http://rsshub:1200/twitter/user/narendramodi"
+
+    - id: "x-emmanuelmacron"
+      name: "X / @EmmanuelMacron"
+      url: "http://rsshub:1200/twitter/user/EmmanuelMacron"
+
+    - id: "x-rishisunak"
+      name: "X / @RishiSunak"
+      url: "http://rsshub:1200/twitter/user/RishiSunak"
+
+    - id: "x-profgalloway"
+      name: "X / @profgalloway"
+      url: "http://rsshub:1200/twitter/user/profgalloway"
+
+    - id: "x-friedberg"
+      name: "X / @friedberg"
+      url: "http://rsshub:1200/twitter/user/friedberg"
+
+    - id: "x-harrystebbings"
+      name: "X / @HarryStebbings"
+      url: "http://rsshub:1200/twitter/user/HarryStebbings"
+
+    - id: "x-lennysan"
+      name: "X / @lennysan"
+      url: "http://rsshub:1200/twitter/user/lennysan"
+
+    - id: "x-wolfejosh"
+      name: "X / @wolfejosh"
+      url: "http://rsshub:1200/twitter/user/wolfejosh"
+
+    - id: "x-rabois"
+      name: "X / @rabois"
+      url: "http://rsshub:1200/twitter/user/rabois"
+
+    - id: "x-david-perell"
+      name: "X / @david_perell"
+      url: "http://rsshub:1200/twitter/user/david_perell"
+
+    - id: "x-fortelabs"
+      name: "X / @fortelabs"
+      url: "http://rsshub:1200/twitter/user/fortelabs"
+
+    - id: "x-aliabdaal"
+      name: "X / @aliabdaal"
+      url: "http://rsshub:1200/twitter/user/aliabdaal"
+
+    - id: "x-mrbeast"
+      name: "X / @MrBeast"
+      url: "http://rsshub:1200/twitter/user/MrBeast"
+
+    - id: "x-levelsio"
+      name: "X / @levelsio"
+      url: "http://rsshub:1200/twitter/user/levelsio"
+
+    - id: "x-arvidkahl"
+      name: "X / @arvidkahl"
+      url: "http://rsshub:1200/twitter/user/arvidkahl"
+
+    - id: "x-dannypostmaa"
+      name: "X / @dannypostmaa"
+      url: "http://rsshub:1200/twitter/user/dannypostmaa"
+
+    - id: "x-nathanbarry"
+      name: "X / @nathanbarry"
+      url: "http://rsshub:1200/twitter/user/nathanbarry"
+
+    - id: "x-justinkan"
+      name: "X / @justinkan"
+      url: "http://rsshub:1200/twitter/user/justinkan"
+
+    - id: "x-pjrvs"
+      name: "X / @pjrvs"
+      url: "http://rsshub:1200/twitter/user/pjrvs"
+
+    - id: "x-tombilyeu"
+      name: "X / @Tombilyeu"
+      url: "http://rsshub:1200/twitter/user/Tombilyeu"
+
+    - id: "x-therealkiyosaki"
+      name: "X / @theRealKiyosaki"
+      url: "http://rsshub:1200/twitter/user/theRealKiyosaki"
+
+    - id: "x-kevinolearytv"
+      name: "X / @kevinolearytv"
+      url: "http://rsshub:1200/twitter/user/kevinolearytv"
+
+    - id: "x-markminervini"
+      name: "X / @markminervini"
+      url: "http://rsshub:1200/twitter/user/markminervini"
+
+    - id: "x-raoulgmi"
+      name: "X / @RaoulGMI"
+      url: "http://rsshub:1200/twitter/user/RaoulGMI"
+
+    - id: "x-lynaldencontact"
+      name: "X / @LynAldenContact"
+      url: "http://rsshub:1200/twitter/user/LynAldenContact"
+
+    - id: "x-lukegromen"
+      name: "X / @LukeGromen"
+      url: "http://rsshub:1200/twitter/user/LukeGromen"
+
+    - id: "x-jeffbooth"
+      name: "X / @JeffBooth"
+      url: "http://rsshub:1200/twitter/user/JeffBooth"
+
+    - id: "x-prestonpysh"
+      name: "X / @PrestonPysh"
+      url: "http://rsshub:1200/twitter/user/PrestonPysh"
+
+    - id: "x-apompliano"
+      name: "X / @APompliano"
+      url: "http://rsshub:1200/twitter/user/APompliano"
+
+    - id: "x-vitalikbuterin"
+      name: "X / @VitalikButerin"
+      url: "http://rsshub:1200/twitter/user/VitalikButerin"
+
+    - id: "x-cz-binance"
+      name: "X / @cz_binance"
+      url: "http://rsshub:1200/twitter/user/cz_binance"
+
+    - id: "x-brian-armstrong"
+      name: "X / @brian_armstrong"
+      url: "http://rsshub:1200/twitter/user/brian_armstrong"
+
+    - id: "x-saylor"
+      name: "X / @saylor"
+      url: "http://rsshub:1200/twitter/user/saylor"
+
+    - id: "x-erikvoorhees"
+      name: "X / @ErikVoorhees"
+      url: "http://rsshub:1200/twitter/user/ErikVoorhees"
+
+    - id: "x-ryanholiday"
+      name: "X / @RyanHoliday"
+      url: "http://rsshub:1200/twitter/user/RyanHoliday"
+
+    - id: "x-tferriss"
+      name: "X / @tferriss"
+      url: "http://rsshub:1200/twitter/user/tferriss"
+
 
 
 # ===============================================================

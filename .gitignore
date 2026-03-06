@@ -3,6 +3,7 @@
 !.env.example
 
 output/
+generated-configs/
 
 .DS_Store
 **/.DS_Store
