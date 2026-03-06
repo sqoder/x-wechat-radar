@@ -8,7 +8,7 @@ cd "$ROOT_DIR"
 
 if [ ! -f .env ]; then
   cp .env.example .env
-  printf '%s\n' "已创建 .env，请先填入 TWITTER_AUTH_TOKEN、WEWORK_WEBHOOK_URL、AI_API_KEY 后再重新运行。"
+  printf '%s\n' "已创建 .env，请先填入 TWITTER_AUTH_TOKEN 和 webhook（WEWORK_WEBHOOK_URL 或 FEISHU_WEBHOOK_URL）后再重新运行。"
   exit 1
 fi
 
