@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal deps
+        run: pip install pyyaml
+
+      - name: Shell syntax check
+        run: |
+          bash -n scripts/doctor.sh
+          bash -n scripts/up.sh
+
+      - name: Python syntax check
+        run: |
+          python -m py_compile overrides/trendradar/crawler/rss/parser.py
+          python -m py_compile overrides/trendradar/notification/renderer.py
+          python -m py_compile overrides/trendradar/notification/senders.py
+
+      - name: YAML sanity check
+        run: |
+          python - <<'PY'
+          import yaml
+          for p in [
+              "config/config.yaml",
+              "config/timeline.yaml",
+              ".env.example",
+          ]:
+              with open(p, "r", encoding="utf-8") as f:
+                  yaml.safe_load(f)
+          print("YAML parse OK")
+          PY
+
+      - name: Docker Compose config check
+        run: |
+          cp .env.example .env
+          docker compose config >/dev/null

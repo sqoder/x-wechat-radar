@@ -1,0 +1,163 @@
+#!/bin/sh
+
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+cd "$ROOT_DIR"
+
+status=0
+
+say() {
+  printf '%s\n' "$1"
+}
+
+fail() {
+  say "FAIL: $1"
+  status=1
+}
+
+pass() {
+  say "OK:   $1"
+}
+
+read_env_value() {
+  key=$1
+  line=$(grep -E "^${key}=" .env 2>/dev/null | tail -n 1 || true)
+  if [ -z "$line" ]; then
+    printf ''
+    return 0
+  fi
+
+  printf '%s' "${line#*=}"
+}
+
+config_section_enabled() {
+  section=$1
+  awk -v target="${section}" '
+    $0 ~ ("^" target ":") { in_section=1; next }
+    in_section && /^[^[:space:]]/ { exit(found ? 0 : 1) }
+    in_section && /^  enabled: true/ { found=1 }
+    END { exit(found ? 0 : 1) }
+  ' config/config.yaml
+}
+
+translation_enabled=0
+analysis_enabled=0
+if config_section_enabled "ai_translation"; then
+  translation_enabled=1
+fi
+if config_section_enabled "ai_analysis"; then
+  analysis_enabled=1
+fi
+
+if [ ! -f .env ]; then
+  fail ".env 不存在。先运行: cp .env.example .env"
+else
+  pass ".env 已存在"
+
+  twitter_token=$(read_env_value "TWITTER_AUTH_TOKEN")
+  if [ -n "$twitter_token" ]; then
+    pass "TWITTER_AUTH_TOKEN 已填写"
+  else
+    fail "TWITTER_AUTH_TOKEN 为空"
+  fi
+
+  feishu_webhook=$(read_env_value "FEISHU_WEBHOOK_URL")
+  wework_webhook=$(read_env_value "WEWORK_WEBHOOK_URL")
+  if [ -n "$feishu_webhook" ]; then
+    pass "FEISHU_WEBHOOK_URL 已填写"
+  else
+    pass "FEISHU_WEBHOOK_URL 未填写"
+  fi
+  if [ -n "$wework_webhook" ]; then
+    pass "WEWORK_WEBHOOK_URL 已填写"
+  else
+    pass "WEWORK_WEBHOOK_URL 未填写"
+  fi
+
+  if [ -z "$feishu_webhook" ] && [ -z "$wework_webhook" ]; then
+    fail "未配置推送通道：至少填写 FEISHU_WEBHOOK_URL 或 WEWORK_WEBHOOK_URL"
+  fi
+
+  if [ "$translation_enabled" -eq 1 ] || [ "$analysis_enabled" -eq 1 ]; then
+    value=$(read_env_value "AI_API_KEY")
+    if [ -n "$value" ]; then
+      pass "AI_API_KEY 已填写（AI 功能已启用）"
+    else
+      fail "AI_API_KEY 为空（当前已启用 ai_translation 或 ai_analysis）"
+    fi
+  else
+    pass "AI_API_KEY 非必填（当前 AI 功能均关闭）"
+  fi
+
+  cron_value=$(read_env_value CRON_SCHEDULE)
+  if [ -n "$cron_value" ]; then
+    pass "CRON_SCHEDULE=${cron_value}"
+  else
+    pass "CRON_SCHEDULE 未显式设置，将使用 5 分钟默认值"
+  fi
+fi
+
+feed_count=$(grep -Ec 'url: "http://rsshub:1200/twitter/user/' config/config.yaml || true)
+if [ "${feed_count}" -gt 0 ]; then
+  pass "已配置 ${feed_count} 个 X 账号 RSS feed"
+else
+  fail "config/config.yaml 里没有配置 X 账号 feed"
+fi
+
+if [ "$translation_enabled" -eq 1 ]; then
+  pass "ai_translation 已启用"
+else
+  pass "ai_translation 已关闭（测试模式）"
+fi
+
+if command -v docker >/dev/null 2>&1; then
+  pass "docker 命令可用"
+
+  compose_source=""
+  if docker compose version >/dev/null 2>&1; then
+    compose_source="docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    compose_source="docker-compose"
+  fi
+
+  if [ -n "$compose_source" ]; then
+    pass "Compose 命令可用 (${compose_source})"
+  else
+    fail "未找到 docker compose / docker-compose"
+  fi
+
+  if docker info >/dev/null 2>&1; then
+    pass "Docker daemon 已启动"
+  else
+    fail "Docker daemon 未启动"
+  fi
+
+  if [ -n "$compose_source" ]; then
+    if [ "$compose_source" = "docker compose" ]; then
+      if docker compose config >/dev/null 2>&1; then
+        pass "docker-compose.yml 语法有效"
+      else
+        fail "docker compose 配置解析失败"
+      fi
+    else
+      if docker-compose config >/dev/null 2>&1; then
+        pass "docker-compose.yml 语法有效"
+      else
+        fail "docker-compose 配置解析失败"
+      fi
+    fi
+  fi
+else
+  fail "当前机器未安装 docker"
+fi
+
+if [ "$status" -ne 0 ]; then
+  say ""
+  say "修复上述 FAIL 后，再运行 ./scripts/up.sh"
+  exit "$status"
+fi
+
+say ""
+say "环境检查通过，可以启动。"

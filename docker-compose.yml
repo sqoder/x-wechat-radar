@@ -1,0 +1,41 @@
+services:
+  rsshub:
+    image: diygod/rsshub:latest
+    container_name: x-rsshub
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${RSSHUB_PORT:-1200}:1200"
+    environment:
+      - NODE_ENV=production
+      - CACHE_TYPE=memory
+      - TWITTER_AUTH_TOKEN=${TWITTER_AUTH_TOKEN}
+      - TWITTER_THIRD_PARTY_API=${TWITTER_THIRD_PARTY_API:-}
+
+  trendradar:
+    image: wantcat/trendradar:latest
+    container_name: x-trendradar
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+    volumes:
+      - ./config:/app/config:ro
+      - ./output:/app/output
+      - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
+      - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL}
+      - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
+      - WEWORK_MSG_TYPE=${WEWORK_MSG_TYPE:-text}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-deepseek/deepseek-chat}
+      - AI_API_BASE=${AI_API_BASE:-}
+      - AI_ANALYSIS_ENABLED=${AI_ANALYSIS_ENABLED:-false}
+      - RUN_MODE=cron
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-*/5 * * * *}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN:-true}
+      - ENABLE_WEBSERVER=${ENABLE_WEBSERVER:-false}
+      - WEBSERVER_PORT=${WEBSERVER_PORT:-8080}
+    ports:
+      - "127.0.0.1:${WEBSERVER_PORT:-8080}:${WEBSERVER_PORT:-8080}"

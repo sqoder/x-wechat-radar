@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+.env.*
+output
+__pycache__
+**/__pycache__
+*.pyc
+.DS_Store
+**/.DS_Store
