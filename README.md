@@ -55,6 +55,8 @@ docker logs -f x-trendradar
 3. 找到 `auth_token`，复制值
 4. 写入 `.env`：
 
+![X auth_token Cookie screenshot](./5ba9aeb751faa9bd7f973ce330d1c77d.png)
+
 ```env
 TWITTER_AUTH_TOKEN=your_auth_token
 ```
@@ -65,6 +67,8 @@ TWITTER_AUTH_TOKEN=your_auth_token
 2. 点击 `消息推送`
 3. 配置机器人并复制 webhook
 4. 写入 `.env`：
+
+![WeCom webhook setup screenshot](./ScreenShot_2026-03-07_044844_909.png)
 
 ```env
 WEWORK_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
