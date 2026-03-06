@@ -12,7 +12,7 @@
 - 内容增强：
   - 图片直接推送
   - 视频以卡片/链接推送（企业微信机器人接口限制）
-  - 可选中文翻译（默认已开启，需 `AI_API_KEY`）
+- 可选中文翻译（默认关闭；开启后需 `AI_API_KEY`）
 
 ## Quick Start
 
@@ -26,7 +26,7 @@ cp .env.example .env
 
 - `TWITTER_AUTH_TOKEN`
 - `WEWORK_WEBHOOK_URL` 或 `FEISHU_WEBHOOK_URL`
-- `AI_API_KEY`（当前默认开启翻译，需要填写）
+- `AI_API_KEY`（可选，只有开启翻译/AI分析时才需要）
 
 ### 2) Validate
 
