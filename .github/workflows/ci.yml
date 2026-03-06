@@ -39,11 +39,36 @@ jobs:
           for p in [
               "config/config.yaml",
               "config/timeline.yaml",
-              ".env.example",
           ]:
               with open(p, "r", encoding="utf-8") as f:
                   yaml.safe_load(f)
           print("YAML parse OK")
+          PY
+
+      - name: Dotenv example sanity check
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          env_file = Path(".env.example")
+          pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
+
+          bad_lines = []
+          for idx, raw in enumerate(env_file.read_text(encoding="utf-8").splitlines(), 1):
+              line = raw.strip()
+              if not line or line.startswith("#"):
+                  continue
+              if not pattern.match(line):
+                  bad_lines.append((idx, raw))
+
+          if bad_lines:
+              print("Invalid dotenv lines in .env.example:")
+              for idx, raw in bad_lines:
+                  print(f"  line {idx}: {raw}")
+              raise SystemExit(1)
+
+          print(".env.example format OK")
           PY
 
       - name: Docker Compose config check
