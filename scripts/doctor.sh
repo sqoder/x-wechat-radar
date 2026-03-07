@@ -107,8 +107,34 @@ else
     pass "WEWORK_WEBHOOK_URL 未填写"
   fi
 
-  if [ -z "$feishu_webhook" ] && [ -z "$wework_webhook" ]; then
-    fail "未配置推送通道：至少填写 FEISHU_WEBHOOK_URL 或 WEWORK_WEBHOOK_URL"
+  feishu_app_id=$(read_env_value "FEISHU_APP_ID")
+  feishu_app_secret=$(read_env_value "FEISHU_APP_SECRET")
+  feishu_app_enabled=0
+  if [ -n "$feishu_app_id" ] || [ -n "$feishu_app_secret" ]; then
+    if [ -n "$feishu_app_id" ] && [ -n "$feishu_app_secret" ]; then
+      feishu_app_enabled=1
+      pass "FEISHU_APP_ID / FEISHU_APP_SECRET 已填写（飞书应用机器人可用）"
+    else
+      fail "FEISHU_APP_ID 和 FEISHU_APP_SECRET 需要成对填写"
+    fi
+  else
+    pass "FEISHU_APP_ID / FEISHU_APP_SECRET 未填写"
+  fi
+
+  if [ -z "$feishu_webhook" ] && [ -z "$wework_webhook" ] && [ "$feishu_app_enabled" -ne 1 ]; then
+    fail "未配置推送通道：至少填写 FEISHU_WEBHOOK_URL、WEWORK_WEBHOOK_URL，或 FEISHU_APP_ID/FEISHU_APP_SECRET"
+  fi
+
+  if [ "$feishu_app_enabled" -eq 1 ]; then
+    recipients_file=$(read_env_value "FEISHU_APP_RECIPIENTS_FILE")
+    if [ -z "$recipients_file" ]; then
+      recipients_file="output/feishu_app_recipients.json"
+    fi
+    if [ -f "$recipients_file" ]; then
+      pass "飞书应用机器人收件人文件已存在：${recipients_file}"
+    else
+      warn "飞书应用机器人首次使用前，需要先私聊机器人一次以建立主动推送收件人（${recipients_file}）"
+    fi
   fi
 
   if [ "$translation_enabled" -eq 1 ] || [ "$analysis_enabled" -eq 1 ]; then

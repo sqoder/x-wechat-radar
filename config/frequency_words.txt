@@ -1,9 +1,25 @@
-# TrendRadar 关键词配置（X RSS 全量模式）
-# 留空词组 = 匹配全部标题。
-# 这样你关注账号的推文会全部进入推送（再由 ai_translation 翻译成中文）。
+# TrendRadar 关键词配置（AI 作者模式）
+# 这里保留一组偏宽的 AI 关键词，用来减少明显噪音。
+# 因为作者本身已经是 AI 相关账号，所以不要写得太窄，否则会漏掉有价值的帖子。
 
-# 如需过滤噪音，可打开下面示例：
-# [GLOBAL_FILTER]
-# giveaway
-# airdrop
-# promo
+[AI]
+ai
+agi
+llm
+gpt
+claude
+gemini
+agent
+model
+inference
+multimodal
+reasoning
+openai
+anthropic
+
+[GLOBAL_FILTER]
+giveaway
+airdrop
+promo
+discount
+follow + retweet

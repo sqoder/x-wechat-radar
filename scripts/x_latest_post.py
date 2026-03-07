@@ -24,18 +24,28 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 from urllib.parse import quote
 import xml.etree.ElementTree as ET
 
 import requests
+from zoneinfo import ZoneInfo
+
+from feishu_app_support import (
+    has_feishu_app_push_target,
+    resolve_recipients_file,
+    send_text_to_recipients,
+)
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT_DIR / ".env"
 RSS_DB_DIR = ROOT_DIR / "output" / "rss"
+CN_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 @dataclass
@@ -264,6 +274,32 @@ def dedupe_keep_order(items: Sequence[str]) -> List[str]:
     return result
 
 
+def format_china_time(raw_time: str) -> str:
+    value = str(raw_time or "").strip()
+    if not value:
+        return "未知"
+
+    dt: Optional[datetime] = None
+    try:
+        dt = parsedate_to_datetime(value)
+    except Exception:
+        dt = None
+
+    if dt is None:
+        iso_text = value.replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(iso_text)
+        except Exception:
+            dt = None
+
+    if dt is None:
+        return value
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
+    return dt.astimezone(CN_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def extract_media_urls(raw_html: str) -> Dict[str, List[str]]:
     if not raw_html:
         return {"image": [], "video": []}
@@ -272,6 +308,30 @@ def extract_media_urls(raw_html: str) -> Dict[str, List[str]]:
     images = [html.unescape(u) for u in images]
     videos = [html.unescape(u) for u in videos]
     return {"image": dedupe_keep_order(images), "video": dedupe_keep_order(videos)}
+
+
+def is_probable_video_post(
+    *,
+    original_title: str,
+    original_body: str,
+    image_urls: Optional[Sequence[str]] = None,
+    video_urls: Optional[Sequence[str]] = None,
+) -> bool:
+    if video_urls:
+        return True
+
+    title = str(original_title or "").strip().lower()
+    body = str(original_body or "").strip().lower()
+    if title == "video" or title.endswith(": video"):
+        return True
+    if re.search(r"\bvideo\b", body):
+        return True
+
+    for image_url in image_urls or []:
+        lowered = str(image_url or "").strip().lower()
+        if "video_thumb" in lowered or "ext_tw_video_thumb" in lowered or "amplify_video_thumb" in lowered:
+            return True
+    return False
 
 
 def parse_first_rss_item(xml_text: str, username: str) -> Optional[PostItem]:
@@ -546,6 +606,114 @@ def truncate_utf8(text: str, max_bytes: int = 18000) -> str:
     return suffix
 
 
+def _truncate_preview(text: str, limit: int) -> str:
+    value = str(text or "").strip()
+    if not value:
+        return ""
+    return value[:limit]
+
+
+def _normalize_author_line(*, author_line: str = "", source_line: str = "") -> str:
+    value = str(author_line or source_line or "").strip()
+    if not value:
+        return ""
+    value = re.sub(r"^(来源|数据源)\s*:\s*", "", value)
+    value = re.sub(r"\s+\((rsshub|nitter|sqlite|rss-db)\)\s*$", "", value, flags=re.IGNORECASE)
+    return value.strip()
+
+
+def _pick_message_title(*, header: str, original_title: str, translated_title: str) -> str:
+    title = str(translated_title or original_title or "").strip()
+    if title:
+        return title
+    return str(header or "[无标题帖子]").strip()
+
+
+def build_post_message_text(
+    *,
+    header: str,
+    author_line: str = "",
+    source_line: str = "",
+    published_at: str,
+    original_title: str,
+    translated_title: str = "",
+    summary: str = "",
+    tags: str = "",
+    original_body: str = "",
+    translated_body: str = "",
+    image_urls: Optional[Sequence[str]] = None,
+    video_urls: Optional[Sequence[str]] = None,
+    ocr_text: str = "",
+    asr_text: str = "",
+    post_url: str = "",
+    body_limit: int = 800,
+) -> str:
+    image_list = list(image_urls or [])
+    video_list = list(video_urls or [])
+    display_title = _truncate_preview(
+        _pick_message_title(
+            header=header,
+            original_title=original_title,
+            translated_title=translated_title,
+        ),
+        120,
+    )
+    meta_parts = []
+    normalized_author = _normalize_author_line(author_line=author_line, source_line=source_line)
+    if normalized_author:
+        meta_parts.append(normalized_author)
+    formatted_time = format_china_time(published_at)
+    if formatted_time:
+        meta_parts.append(formatted_time)
+
+    lines = [
+        f"🧠 {display_title}",
+    ]
+    if meta_parts:
+        lines.append(" | ".join(meta_parts))
+
+    core_lines: List[str] = []
+    if summary:
+        core_lines.append(f"总结：{summary}")
+    original_body_preview = _truncate_preview(original_body, body_limit)
+    translated_body_preview = _truncate_preview(translated_body, body_limit)
+    original_core = original_body_preview or str(original_title or "[无标题帖子]").strip()
+    translated_core = translated_body_preview or str(translated_title or "").strip()
+    if original_core:
+        core_lines.append(f"原文：{original_core}")
+    if translated_core:
+        core_lines.append(f"翻译：{translated_core}")
+    if ocr_text:
+        core_lines.append(f"图片OCR：{ocr_text}")
+    if asr_text:
+        core_lines.append(f"视频ASR：{asr_text}")
+
+    if core_lines:
+        lines.extend(["", "核心内容：", *core_lines])
+
+    media_lines: List[str] = []
+    if image_list:
+        media_lines.append(f"图片：{image_list[0]}")
+    if video_list:
+        media_lines.append(f"视频：{video_list[0]}")
+    elif is_probable_video_post(
+        original_title=original_title,
+        original_body=original_body,
+        image_urls=image_list,
+        video_urls=video_list,
+    ):
+        media_lines.append("视频：该帖为视频帖，当前源仅返回预览图，请点开原帖观看")
+
+    if media_lines:
+        lines.extend(["", *media_lines])
+
+    if tags:
+        lines.extend(["", "标签：", str(tags).strip()])
+    if post_url:
+        lines.extend(["", "原帖：", post_url])
+    return "\n".join(lines)
+
+
 def send_to_feishu(*, webhook: str, text_content: str) -> None:
     feishu_post_json(
         webhook,
@@ -556,27 +724,35 @@ def send_to_feishu(*, webhook: str, text_content: str) -> None:
     )
 
 
-def resolve_push_target(target: str, *, wework_webhook: str, feishu_webhook: str) -> str:
+def resolve_push_target(
+    target: str,
+    *,
+    wework_webhook: str,
+    feishu_webhook: str,
+    has_feishu_app: bool = False,
+) -> str:
     value = str(target or "auto").strip().lower()
     if value not in {"auto", "wework", "feishu", "both"}:
         raise ValueError("push target 必须是 auto/wework/feishu/both")
 
     has_wework = bool(str(wework_webhook or "").strip())
-    has_feishu = bool(str(feishu_webhook or "").strip())
+    has_feishu = bool(str(feishu_webhook or "").strip()) or has_feishu_app
 
     if value == "auto":
         if has_feishu:
             return "feishu"
         if has_wework:
             return "wework"
-        raise ValueError("auto 模式下未找到可用 webhook（需配置 FEISHU_WEBHOOK_URL 或 WEWORK_WEBHOOK_URL）")
+        raise ValueError(
+            "auto 模式下未找到可用推送目标（需配置 FEISHU_WEBHOOK_URL、飞书应用机器人收件人，或 WEWORK_WEBHOOK_URL）"
+        )
 
     if value == "wework" and not has_wework:
         raise ValueError("push_target=wework 但 WEWORK_WEBHOOK_URL 为空")
     if value == "feishu" and not has_feishu:
-        raise ValueError("push_target=feishu 但 FEISHU_WEBHOOK_URL 为空")
+        raise ValueError("push_target=feishu 但既没有 FEISHU_WEBHOOK_URL，也没有可用的飞书应用机器人收件人")
     if value == "both" and (not has_wework or not has_feishu):
-        raise ValueError("push_target=both 需要同时配置 WEWORK_WEBHOOK_URL 和 FEISHU_WEBHOOK_URL")
+        raise ValueError("push_target=both 需要企业微信通道，以及飞书 webhook 或飞书应用机器人收件人")
     return value
 
 
@@ -671,6 +847,9 @@ def main() -> int:
     env = load_env_file(ENV_PATH)
     wework_webhook = args.wework_webhook_url or env.get("WEWORK_WEBHOOK_URL", "").strip()
     feishu_webhook = args.feishu_webhook_url or env.get("FEISHU_WEBHOOK_URL", "").strip()
+    feishu_app_id = env.get("FEISHU_APP_ID", "").strip()
+    feishu_app_secret = env.get("FEISHU_APP_SECRET", "").strip()
+    feishu_recipients_file = resolve_recipients_file(env.get("FEISHU_APP_RECIPIENTS_FILE", ""))
     ai_base = normalize_ai_base(env.get("AI_API_BASE", ""))
     ai_model = strip_openai_prefix(env.get("AI_MODEL", "qwen2.5:1.5b"))
     ai_key = env.get("AI_API_KEY", "local_dummy_key")
@@ -702,33 +881,32 @@ def main() -> int:
         )
         return 1
 
-    title = post.title
-    body = post.body_text
+    original_title = post.title or "[无标题帖子]"
+    original_body = post.body_text or ""
+    translated_title = ""
+    translated_body = ""
     summary = ""
     tags = ""
 
-    meaningful = has_meaningful_text(f"{title}\n{body}")
+    meaningful = has_meaningful_text(f"{original_title}\n{original_body}")
     if not meaningful:
         if post.video_urls:
-            title = "该帖为纯视频帖（原文文本较少）"
             summary = "该帖子主要为视频内容，建议点开原帖查看完整视频。"
             tags = "#视频 #媒体帖"
         elif post.image_urls:
-            title = "该帖为图片帖（原文文本较少）"
             summary = "该帖子主要为图片内容，建议查看配图与原帖。"
             tags = "#图片 #媒体帖"
         else:
-            title = "该帖文本信息较少"
             summary = "该帖可解析文本不足，建议直接查看原帖。"
             tags = "#X动态"
-        body = body or "（未提取到可用正文文本）"
+        original_body = original_body or "（未提取到可用正文文本）"
     elif not args.no_translate:
         try:
             title_cn = maybe_zh_translate(
-                source_text=title, api_base=ai_base, model=ai_model, api_key=ai_key
+                source_text=original_title, api_base=ai_base, model=ai_model, api_key=ai_key
             )
             body_cn = maybe_zh_translate(
-                source_text=body, api_base=ai_base, model=ai_model, api_key=ai_key
+                source_text=original_body, api_base=ai_base, model=ai_model, api_key=ai_key
             )
             summary = summarize_cn(
                 title_cn=title_cn,
@@ -744,8 +922,8 @@ def main() -> int:
                 model=ai_model,
                 api_key=ai_key,
             )
-            title = title_cn or title
-            body = body_cn or body
+            translated_title = title_cn or ""
+            translated_body = body_cn or ""
         except Exception as exc:
             print(f"[WARN] 本地翻译失败，回退原文: {exc}", file=sys.stderr)
 
@@ -783,29 +961,23 @@ def main() -> int:
         except Exception as exc:
             print(f"[WARN] 视频下载/ASR失败: {exc}", file=sys.stderr)
 
-    lines = [
-        f"【按需查询｜@{username} 最新帖子】",
-        f"数据源: {post.source_name} ({post.source})",
-        f"时间: {post.published_at or '未知'}",
-        f"标题: {title}",
-    ]
-    if summary:
-        lines.append(f"总结: {summary}")
-    if tags:
-        lines.append(f"标签: {tags}")
-    if body:
-        lines.append(f"内容: {body[:800]}")
-    if ocr_text:
-        lines.append(f"图片OCR: {ocr_text}")
-    if asr_text:
-        lines.append(f"视频ASR: {asr_text}")
-    if post.image_urls:
-        lines.append(f"图片: {post.image_urls[0]}")
-    if post.video_urls:
-        lines.append(f"视频: {post.video_urls[0]}")
-    lines.append(f"原帖: {post.url}")
-
-    text_content = "\n".join(lines)
+    text_content = build_post_message_text(
+        header=f"【按需查询｜@{username} 最新帖子】",
+        author_line=post.source_name,
+        published_at=post.published_at,
+        original_title=original_title,
+        translated_title=translated_title,
+        summary=summary,
+        tags=tags,
+        original_body=original_body,
+        translated_body=translated_body,
+        image_urls=post.image_urls,
+        video_urls=post.video_urls,
+        ocr_text=ocr_text,
+        asr_text=asr_text,
+        post_url=post.url,
+        body_limit=800,
+    )
     print(textwrap.shorten(text_content, width=1200, placeholder=" ..."))
 
     if args.no_push:
@@ -816,6 +988,11 @@ def main() -> int:
             args.push_target,
             wework_webhook=wework_webhook,
             feishu_webhook=feishu_webhook,
+            has_feishu_app=has_feishu_app_push_target(
+                feishu_app_id,
+                feishu_app_secret,
+                feishu_recipients_file,
+            ),
         )
     except ValueError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
@@ -829,14 +1006,25 @@ def main() -> int:
                 text_content=text_content,
                 image_bytes=image_bytes,
                 post_url=post.url,
-                video_title=title,
-                video_desc=summary or body[:120],
+                video_title=translated_title or original_title,
+                video_desc=summary or translated_body[:120] or original_body[:120],
                 video_has_media=bool(post.video_urls),
             )
             pushed_to.append("企业微信")
         if push_target in {"feishu", "both"}:
-            send_to_feishu(webhook=feishu_webhook, text_content=text_content)
-            pushed_to.append("飞书")
+            if feishu_webhook:
+                send_to_feishu(webhook=feishu_webhook, text_content=text_content)
+                pushed_to.append("飞书Webhook")
+            else:
+                sent_count, _ = send_text_to_recipients(
+                    app_id=feishu_app_id,
+                    app_secret=feishu_app_secret,
+                    recipients_file=feishu_recipients_file,
+                    text=text_content,
+                )
+                if sent_count <= 0:
+                    raise RuntimeError("飞书应用机器人没有可用收件人，请先私聊机器人一次")
+                pushed_to.append(f"飞书应用机器人({sent_count})")
     except Exception as exc:
         print(f"[ERROR] 推送失败: {exc}", file=sys.stderr)
         return 1
