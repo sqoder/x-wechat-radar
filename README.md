@@ -1,97 +1,109 @@
-# X AI Radar
+# x-wechat-feishu-radar
 
-一个面向 AI 信息追踪的 X（Twitter）监控项目。
+一个面向 AI 信息追踪的 X 监控项目。
 
-它把你关注的 X 账号转成可抓取 RSS，经过去重、翻译、摘要和标签整理后，发到飞书或企业微信。当前默认配置已经收敛成一套能直接跑的方案：
+它做的事情很简单：持续抓取一组 AI 相关作者的 X 帖子，整理成适合在飞书里阅读的消息，然后用两种方式给你：
 
-- 监控 42 个 AI 相关作者
-- 实时增量推送新帖
-- 每天 08:00 发送一次汇总
-- 支持飞书应用机器人私聊问答
-- 单条消息统一使用「标题 / 作者+时间 / 核心内容 / 标签 / 原帖链接」排版
+- 实时推送新帖子
+- 每天 08:00 发一份汇总
 
-## 适合什么场景
+除了被动接收，你还可以直接在飞书里问：
 
-- 不想频繁刷 X，只想接收关键动态
-- 重点追踪 AI 公司、研究员、产品负责人和独立开发者
-- 想在飞书里直接问“某个作者最新发了什么”
+- `查看openai最新的动态`
+- `查看karpathy最新的动态`
+- `我要看马斯克最新帖子`
 
-## 当前默认行为
+## 这套项目当前已经实现了什么
 
-- 数据源：`RSSHub -> Nitter 回退 -> 本地 SQLite 历史库回退`
-- 推送策略：实时增量 + 08:00 固定汇总
-- 默认账号池：42 个 AI 作者
-- 默认关键词：一组较宽的 AI 词，用于过滤明显噪音
-- 默认对话能力：飞书应用机器人
+- 默认监控 42 个 AI 相关作者
+- 3 分片错峰抓取，降低 RSSHub 压力
+- 飞书应用机器人支持：
+  - 私聊问答
+  - 私聊实时主动推送
+  - 每天 08:00 私聊汇总
+- 群机器人 / 企业微信 webhook 仍可继续作为群推送通道
+- 单条消息统一排版为：
+  - 标题
+  - 作者 + 时间
+  - 核心内容
+  - 标签
+  - 原帖链接
+- 核心内容里同时保留原文和中文翻译
 
-## 核心链路
+## 项目怎么工作
 
-自动推送链路：
+自动推送主链路：
 
 `X -> RSSHub -> TrendRadar(shard1/2/3) -> 飞书/企业微信`
 
 飞书问答链路：
 
-`飞书消息 -> feishu_command_bot -> RSSHub/Nitter/SQLite -> 飞书回复`
+`飞书消息 -> feishu_command_bot -> RSSHub / Nitter / SQLite -> 飞书回复`
 
-更详细的开发视角说明见：
+如果你关心内部组件和扩展点，直接看：
 
 - [docs/ARCHITECTURE_CN.md](./docs/ARCHITECTURE_CN.md)
 
 ## 快速启动
 
-### 1. 环境要求
+### 1. 准备环境
 
-- Docker / Docker Compose
+- Docker 或 Docker Compose
 - Python 3.10+
 - 一个可用的 X `auth_token`
 
 ### 2. 初始化配置
 
 ```bash
-cd x-wechat-feishu-radar
 cp .env.example .env
 ```
 
-至少填写：
+至少填这些：
 
 - `TWITTER_AUTH_TOKEN`
 - `AI_API_KEY`
-- `FEISHU_WEBHOOK_URL` 或 `WEWORK_WEBHOOK_URL` 二选一
-
-如果你要启用飞书应用机器人私聊问答和单聊主动推送，还要填写：
-
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
 
-### 3. 启动前体检
+如果你还想保留群机器人推送，再额外填：
+
+- `FEISHU_WEBHOOK_URL`
+
+或者企业微信：
+
+- `WEWORK_WEBHOOK_URL`
+
+### 3. 启动前检查
 
 ```bash
 ./scripts/doctor.sh
 ```
 
-### 4. 推荐启动方式
+### 4. 启动
 
 ```bash
 ./scripts/up-stable.sh
 ```
 
-这条命令会做两件事：
+这会启动：
 
-- 启动 `rsshub + 3 个 TrendRadar 分片`
-- 如果 `.env` 已填写 `FEISHU_APP_ID / FEISHU_APP_SECRET`，自动启动 `feishu-command-bot`
+- `x-rsshub`
+- `x-trendradar-shard1`
+- `x-trendradar-shard2`
+- `x-trendradar-shard3`
+- `x-feishu-command-bot`（当 `.env` 已配置飞书应用机器人时）
 
-### 5. 首次使用飞书应用机器人
+### 5. 首次激活飞书私聊推送
 
-如果你走的是“飞书应用机器人私聊主动推送”模式，第一次需要先私聊机器人发一句话，建立主动推送收件人。
+第一次需要先私聊机器人发一句话，建立收件人。
 
-完成后你会得到：
+之后你会同时得到：
 
 - 实时新帖推送
 - 每天 08:00 汇总
-- 私聊直接查询指定作者最新帖子
+- 私聊查询作者最新帖子
 
-## 常用命令
+## 最常用的命令
 
 启动稳定模式：
 
@@ -99,32 +111,26 @@ cp .env.example .env
 ./scripts/up-stable.sh
 ```
 
-只做本地体检：
+查看体检结果：
 
 ```bash
 ./scripts/doctor.sh
 ```
 
-重建 3 分片配置：
-
-```bash
-python3 scripts/build_shard_configs.py --shards 3
-```
-
-本地自测飞书问答，不连接飞书：
+本地自测飞书问答：
 
 ```bash
 ./scripts/feishu-bot.sh --self-test "查看openai最新的动态"
 ```
 
-按需查询某个账号最新帖子：
+按命令行查询某个作者最新帖子：
 
 ```bash
 ./scripts/x-latest.sh OpenAI --no-push
 ./scripts/x-latest.sh karpathy --push-target feishu
 ```
 
-查看日志：
+查看服务日志：
 
 ```bash
 docker logs -f x-trendradar-shard1
@@ -133,72 +139,57 @@ docker logs -f x-trendradar-shard3
 docker logs -f x-feishu-command-bot
 ```
 
-## 配置入口
+## 配置从哪里改
 
 ### `.env`
 
-主要放运行时密钥和开关：
+这里放运行时密钥和推送开关。
+
+最重要的是：
 
 - `TWITTER_AUTH_TOKEN`
 - `AI_API_KEY / AI_API_BASE / AI_MODEL`
-- `FEISHU_WEBHOOK_URL / FEISHU_WEBHOOK_SECRET`
-- `WEWORK_WEBHOOK_URL`
 - `FEISHU_APP_ID / FEISHU_APP_SECRET`
 - `FEISHU_APP_PUSH_*`
+- `FEISHU_WEBHOOK_URL`
+- `WEWORK_WEBHOOK_URL`
 
-模板见：
-
-- [.env.example](./.env.example)
+模板见 [.env.example](./.env.example)。
 
 ### `config/config.yaml`
 
-主配置，决定：
+这里决定：
 
-- 监控哪些 RSS feed
-- 使用什么调度 preset
-- 以什么报告模式推送
-- 各推送区域是否显示
+- 监控哪些作者
+- 抓取模式
+- 调度方式
+- 推送区域
 
-关键位置：
+你最常改的是：
 
 - `rss.feeds`
 - `schedule`
 - `report`
-- `display`
-- `notification`
 
 ### `config/frequency_words.txt`
 
-决定帖子过滤逻辑。
+这里决定过滤规则。
 
-当前策略是：
+当前默认是：
 
-- 一组较宽的 AI 关键词，尽量保留 AI 相关内容
-- 一组全局噪音过滤词，压掉 giveaway / promo 这类帖子
+- 用一组较宽的 AI 关键词保留 AI 相关帖子
+- 用全局过滤词压掉 giveaway、promo 这类噪音
 
 ### `config/timeline.yaml`
 
-控制调度时间线。当前推荐用自定义方案：
+这里决定时间线。
+
+当前策略是：
 
 - 全天实时增量
 - 08:00 固定汇总
 
-## 开发者关注的文件
-
-- [scripts/feishu_command_bot.py](./scripts/feishu_command_bot.py)
-  负责飞书长连接、命令解析、主动推送、08:00 汇总
-- [scripts/feishu_app_support.py](./scripts/feishu_app_support.py)
-  负责飞书应用消息发送、收件人注册、tenant token 获取
-- [scripts/x_latest_post.py](./scripts/x_latest_post.py)
-  负责按需查询、翻译、摘要、消息排版、推送脚本
-- [scripts/build_shard_configs.py](./scripts/build_shard_configs.py)
-  负责把主配置拆成 3 个分片
-- [overrides/trendradar/](./overrides/trendradar)
-  对上游 TrendRadar 的定制覆盖层
-
-## 当前消息排版
-
-实时推送和飞书问答已经统一成单条文本模板：
+## 飞书里实际收到的消息格式
 
 ```text
 🧠 标题
@@ -208,8 +199,6 @@ docker logs -f x-feishu-command-bot
 总结：...
 原文：...
 翻译：...
-图片：...
-视频：...
 
 标签：
 #标签1 #标签2
@@ -218,16 +207,24 @@ docker logs -f x-feishu-command-bot
 https://x.com/...
 ```
 
-这套模板主要由：
+如果帖子带图片或视频，消息里会追加媒体链接。
 
-- [scripts/x_latest_post.py](./scripts/x_latest_post.py)
+## 开发时最该看的文件
+
 - [scripts/feishu_command_bot.py](./scripts/feishu_command_bot.py)
+  飞书长连接、命令识别、主动推送、08:00 汇总都在这里
+- [scripts/feishu_app_support.py](./scripts/feishu_app_support.py)
+  飞书应用消息发送、收件人注册、token 获取
+- [scripts/x_latest_post.py](./scripts/x_latest_post.py)
+  按需查询、翻译、摘要、消息模板
+- [scripts/build_shard_configs.py](./scripts/build_shard_configs.py)
+  把主配置拆成 3 个分片
+- [overrides/trendradar/](./overrides/trendradar)
+  对上游 TrendRadar 的定制层
 
-共同驱动。
+## 改动后怎么验证
 
-## 验证与回归
-
-建议每次改动后至少执行：
+至少跑这三条：
 
 ```bash
 ./scripts/doctor.sh
@@ -235,7 +232,7 @@ python3 -m unittest discover -s tests -p "test_*.py" -v
 ./scripts/feishu-bot.sh --self-test "查看openai最新的动态"
 ```
 
-如果你修改了分片配置，再补一次：
+如果你改了作者列表，再补一次：
 
 ```bash
 python3 scripts/build_shard_configs.py --shards 3
@@ -243,9 +240,9 @@ python3 scripts/build_shard_configs.py --shards 3
 
 ## 常见问题
 
-### 1. 飞书应用机器人不回消息
+### 飞书机器人不回消息
 
-先看：
+看这里：
 
 ```bash
 docker logs -f x-feishu-command-bot
@@ -254,39 +251,33 @@ docker logs -f x-feishu-command-bot
 重点确认：
 
 - `FEISHU_APP_ID / FEISHU_APP_SECRET` 是否正确
-- websocket 是否连接成功
+- websocket 是否已经连上
 - 是否已经先私聊过机器人一次
 
-### 2. 没收到实时推送
-
-先区分是哪条链路：
-
-- 飞书群机器人 / 企业微信群机器人：看 `x-trendradar-shard*`
-- 飞书应用机器人单聊主动推送：看 `x-feishu-command-bot`
-
-### 3. 一直推旧消息
+### 一直收到旧消息
 
 检查：
 
 - `FEISHU_APP_PUSH_BOOTSTRAP_SKIP_EXISTING=true`
 - `output/feishu_app_push_state.json` 是否异常
 
-### 4. RSSHub 超时或 503
+### 没收到实时推送
 
-优先使用：
+先区分链路：
 
-```bash
-./scripts/up-stable.sh
-```
+- 群机器人 / 企业微信群推送：看 `x-trendradar-shard*`
+- 飞书私聊主动推送：看 `x-feishu-command-bot`
 
-不要把 42 个账号堆在单实例里高频抓取。
+### RSSHub 超时或 503
 
-## 上传到 GitHub
+不要把所有作者塞进单实例高频抓取。这个项目默认的 3 分片稳定模式就是为了解决这个问题。
 
-上传步骤见：
+## 安全
 
-- [docs/GITHUB_UPLOAD_CN.md](./docs/GITHUB_UPLOAD_CN.md)
+- 不要提交 `.env`
+- 不要提交 `output/` 和 `logs/`
+- webhook、token、cookie 泄露后立即重置
 
-## 许可
+## License
 
 见 [LICENSE](./LICENSE)
