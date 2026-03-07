@@ -21,6 +21,10 @@ pass() {
   say "OK:   $1"
 }
 
+warn() {
+  say "WARN: $1"
+}
+
 read_env_value() {
   key=$1
   line=$(grep -E "^${key}=" .env 2>/dev/null | tail -n 1 || true)
@@ -104,6 +108,20 @@ if [ "${feed_count}" -gt 0 ]; then
   pass "已配置 ${feed_count} 个 X 账号 RSS feed"
 else
   fail "config/config.yaml 里没有配置 X 账号 feed"
+fi
+
+if [ "${feed_count}" -gt 30 ]; then
+  cron_value=$(read_env_value CRON_SCHEDULE)
+  if [ -n "$cron_value" ]; then
+    case "$cron_value" in
+      "*/1 * * * *"|"* * * * *")
+        warn "当前 feed 数较多且 CRON_SCHEDULE=${cron_value}，容易超时。建议改为 */3 并使用 ./scripts/up-stable.sh 分片抓取。"
+        ;;
+      *)
+        :
+        ;;
+    esac
+  fi
 fi
 
 if [ "$translation_enabled" -eq 1 ]; then

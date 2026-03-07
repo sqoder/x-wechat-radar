@@ -15,11 +15,22 @@ from trendradar.report.formatter import format_title_for_platform
 DEFAULT_REGION_ORDER = ["hotlist", "rss", "new_items", "standalone", "ai_analysis"]
 
 
+def _truncate_text(text: str, max_length: int) -> str:
+    """按字符长度截断文本，保留可读性"""
+    if len(text) <= max_length:
+        return text
+    return text[:max_length].rstrip() + "..."
+
+
 def _format_rss_item_summary(item: Dict, platform: str) -> str:
     """格式化 RSS 摘要（用于附加显示标签、媒体链接、正文摘要）"""
     summary = str(item.get("summary", "") or "").strip()
     if not summary:
         return ""
+
+    # 企业微信/飞书 markdown 长内容可读性较差，统一做轻量截断
+    max_length = 300 if platform == "feishu" else 220
+    summary = _truncate_text(summary, max_length)
 
     if platform == "feishu":
         return f"    <font color='grey'>{summary}</font>\n"

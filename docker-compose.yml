@@ -20,7 +20,9 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./output:/app/output
+      - ./overrides/trendradar/crawler/rss/fetcher.py:/app/trendradar/crawler/rss/fetcher.py:ro
       - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/ai/translator.py:/app/trendradar/ai/translator.py:ro
       - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
       - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
     environment:
@@ -50,7 +52,9 @@ services:
     volumes:
       - ./generated-configs/ai:/app/config:ro
       - ./output/groups/ai:/app/output
+      - ./overrides/trendradar/crawler/rss/fetcher.py:/app/trendradar/crawler/rss/fetcher.py:ro
       - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/ai/translator.py:/app/trendradar/ai/translator.py:ro
       - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
       - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
     environment:
@@ -77,7 +81,9 @@ services:
     volumes:
       - ./generated-configs/politics:/app/config:ro
       - ./output/groups/politics:/app/output
+      - ./overrides/trendradar/crawler/rss/fetcher.py:/app/trendradar/crawler/rss/fetcher.py:ro
       - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/ai/translator.py:/app/trendradar/ai/translator.py:ro
       - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
       - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
     environment:
@@ -104,7 +110,9 @@ services:
     volumes:
       - ./generated-configs/invest:/app/config:ro
       - ./output/groups/invest:/app/output
+      - ./overrides/trendradar/crawler/rss/fetcher.py:/app/trendradar/crawler/rss/fetcher.py:ro
       - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/ai/translator.py:/app/trendradar/ai/translator.py:ro
       - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
       - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
     environment:
@@ -120,3 +128,108 @@ services:
       - CRON_SCHEDULE=${CRON_SCHEDULE_INVEST:-3/5 * * * *}
       - IMMEDIATE_RUN=${IMMEDIATE_RUN_GROUPS:-false}
       - ENABLE_WEBSERVER=false
+
+  trendradar-shard1:
+    image: wantcat/trendradar:latest
+    container_name: x-trendradar-shard1
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+    profiles: ["sharded"]
+    volumes:
+      - ./generated-configs/shards/shard1:/app/config:ro
+      - ./output/shards/shard1:/app/output
+      - ./overrides/trendradar/crawler/rss/fetcher.py:/app/trendradar/crawler/rss/fetcher.py:ro
+      - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/ai/translator.py:/app/trendradar/ai/translator.py:ro
+      - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
+      - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL}
+      - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
+      - WEWORK_MSG_TYPE=${WEWORK_MSG_TYPE:-text}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-deepseek/deepseek-chat}
+      - AI_API_BASE=${AI_API_BASE:-}
+      - AI_ANALYSIS_ENABLED=${AI_ANALYSIS_ENABLED:-false}
+      - RUN_MODE=cron
+      - CRON_SCHEDULE=${SHARD_CRON_SCHEDULE_1:-0-59/3 * * * *}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN_SHARDS:-false}
+      - ENABLE_WEBSERVER=false
+
+  trendradar-shard2:
+    image: wantcat/trendradar:latest
+    container_name: x-trendradar-shard2
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+    profiles: ["sharded"]
+    volumes:
+      - ./generated-configs/shards/shard2:/app/config:ro
+      - ./output/shards/shard2:/app/output
+      - ./overrides/trendradar/crawler/rss/fetcher.py:/app/trendradar/crawler/rss/fetcher.py:ro
+      - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/ai/translator.py:/app/trendradar/ai/translator.py:ro
+      - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
+      - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL}
+      - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
+      - WEWORK_MSG_TYPE=${WEWORK_MSG_TYPE:-text}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-deepseek/deepseek-chat}
+      - AI_API_BASE=${AI_API_BASE:-}
+      - AI_ANALYSIS_ENABLED=${AI_ANALYSIS_ENABLED:-false}
+      - RUN_MODE=cron
+      - CRON_SCHEDULE=${SHARD_CRON_SCHEDULE_2:-1-59/3 * * * *}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN_SHARDS:-false}
+      - ENABLE_WEBSERVER=false
+
+  trendradar-shard3:
+    image: wantcat/trendradar:latest
+    container_name: x-trendradar-shard3
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+    profiles: ["sharded"]
+    volumes:
+      - ./generated-configs/shards/shard3:/app/config:ro
+      - ./output/shards/shard3:/app/output
+      - ./overrides/trendradar/crawler/rss/fetcher.py:/app/trendradar/crawler/rss/fetcher.py:ro
+      - ./overrides/trendradar/crawler/rss/parser.py:/app/trendradar/crawler/rss/parser.py:ro
+      - ./overrides/trendradar/ai/translator.py:/app/trendradar/ai/translator.py:ro
+      - ./overrides/trendradar/notification/renderer.py:/app/trendradar/notification/renderer.py:ro
+      - ./overrides/trendradar/notification/senders.py:/app/trendradar/notification/senders.py:ro
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL}
+      - WEWORK_WEBHOOK_URL=${WEWORK_WEBHOOK_URL}
+      - WEWORK_MSG_TYPE=${WEWORK_MSG_TYPE:-text}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-deepseek/deepseek-chat}
+      - AI_API_BASE=${AI_API_BASE:-}
+      - AI_ANALYSIS_ENABLED=${AI_ANALYSIS_ENABLED:-false}
+      - RUN_MODE=cron
+      - CRON_SCHEDULE=${SHARD_CRON_SCHEDULE_3:-2-59/3 * * * *}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN_SHARDS:-false}
+      - ENABLE_WEBSERVER=false
+
+  feishu-command-bot:
+    build:
+      context: .
+      dockerfile: docker/feishu-bot.Dockerfile
+    container_name: x-feishu-command-bot
+    restart: unless-stopped
+    depends_on:
+      - rsshub
+    profiles: ["feishu-bot"]
+    volumes:
+      - ./.env:/workspace/.env:ro
+      - ./scripts:/workspace/scripts:ro
+      - ./output:/workspace/output
+      - ./logs:/workspace/logs
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+    command: ["python3", "/workspace/scripts/feishu_command_bot.py"]

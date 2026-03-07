@@ -35,7 +35,20 @@ class ParsedRSSItem:
 class RSSParser:
     """RSS 解析器"""
 
-    def __init__(self, max_summary_length: int = 500):
+    TOPIC_KEYWORDS = [
+        ("#AI", ("artificial intelligence", "machine learning", "ai", "ml", "模型", "大模型")),
+        ("#LLM", ("llm", "language model", "foundation model", "reasoning model")),
+        ("#Agent", ("agent", "agents", "智能体", "multi-agent")),
+        ("#OpenAI", ("openai", "chatgpt", "gpt-", "sora")),
+        ("#Anthropic", ("anthropic", "claude")),
+        ("#GoogleAI", ("google ai", "gemini", "deepmind")),
+        ("#MetaAI", ("meta ai", "llama")),
+        ("#Qwen", ("qwen", "通义千问")),
+        ("#推理", ("reasoning", "chain-of-thought", "思维链", "推理")),
+        ("#发布", ("launch", "launched", "release", "released", "发布", "开源")),
+    ]
+
+    def __init__(self, max_summary_length: int = 380):
         """
         初始化解析器
 
@@ -132,8 +145,8 @@ class RSSParser:
 
         body_text = self._clean_text(raw_summary or content_text or content_html)
         media_urls = self._extract_media_urls(content_html or raw_summary)
-        hashtags = self._extract_hashtags(f"{raw_title} {body_text}")
-        summary = self._compose_summary(body_text, hashtags, media_urls)
+        tags = self._build_tags(f"{raw_title} {body_text}")
+        summary = self._compose_summary(body_text, tags, media_urls)
 
         title = raw_title
         if not title:
@@ -298,22 +311,95 @@ class RSSParser:
                 seen.add(full_tag)
         return result
 
+    def _extract_mentions(self, text: str) -> List[str]:
+        """提取 @用户名"""
+        if not text:
+            return []
+        usernames = re.findall(r"(?<![\w@])@([A-Za-z0-9_]{1,30})", text)
+        return [f"@{name}" for name in usernames]
+
+    def _extract_cashtags(self, text: str) -> List[str]:
+        """提取 $股票代码"""
+        if not text:
+            return []
+        symbols = re.findall(r"(?<!\w)\$([A-Za-z]{1,8})", text)
+        return [f"${symbol.upper()}" for symbol in symbols]
+
+    def _extract_topic_tags(self, text: str) -> List[str]:
+        """按关键词补充主题标签"""
+        if not text:
+            return []
+        lowered = text.lower()
+        tags: List[str] = []
+        for tag, keywords in self.TOPIC_KEYWORDS:
+            matched = False
+            for keyword in keywords:
+                keyword = keyword.lower()
+                if len(keyword) <= 3 and keyword.isalpha():
+                    pattern = rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])"
+                    if re.search(pattern, lowered):
+                        matched = True
+                        break
+                elif keyword in lowered:
+                    matched = True
+                    break
+            if matched:
+                tags.append(tag)
+        return tags
+
+    def _dedupe_tokens(self, tokens: List[str]) -> List[str]:
+        """去重并保持顺序"""
+        result: List[str] = []
+        seen = set()
+        for token in tokens:
+            normalized = str(token or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            result.append(normalized)
+            seen.add(normalized)
+        return result
+
+    def _build_tags(self, text: str) -> List[str]:
+        """构建最终标签集合"""
+        tokens = (
+            self._extract_hashtags(text)
+            + self._extract_mentions(text)
+            + self._extract_cashtags(text)
+            + self._extract_topic_tags(text)
+        )
+        return self._dedupe_tokens(tokens)
+
+    def _build_brief_summary(self, body_text: str, max_length: int = 130) -> str:
+        """生成短摘要，避免推送内容过长"""
+        if not body_text:
+            return ""
+
+        text = re.sub(r"https?://\S+", "", body_text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text:
+            return ""
+
+        if len(text) <= max_length:
+            return text
+        return text[:max_length].rstrip() + "..."
+
     def _compose_summary(
         self,
         body_text: str,
-        hashtags: List[str],
+        tags: List[str],
         media_urls: Dict[str, List[str]],
     ) -> Optional[str]:
         """组装可读摘要，包含正文、标签、媒体链接"""
         parts: List[str] = []
-        if hashtags:
-            parts.append(f"标签: {' '.join(hashtags[:8])}")
+        if tags:
+            parts.append(f"标签: {' '.join(tags[:8])}")
+        brief = self._build_brief_summary(body_text)
+        if brief:
+            parts.append(f"摘要: {brief}")
         if media_urls.get("video"):
             parts.append(f"视频: {media_urls['video'][0]}")
         if media_urls.get("image"):
             parts.append(f"图片: {media_urls['image'][0]}")
-        if body_text:
-            parts.append(f"内容: {body_text}")
 
         if not parts:
             return None
@@ -376,8 +462,8 @@ class RSSParser:
 
         body_text = self._clean_text(raw_summary)
         media_urls = self._extract_media_urls(raw_summary)
-        hashtags = self._extract_hashtags(f"{title_hint} {body_text}")
-        return self._compose_summary(body_text, hashtags, media_urls)
+        tags = self._build_tags(f"{title_hint} {body_text}")
+        return self._compose_summary(body_text, tags, media_urls)
 
     def _parse_author(self, entry: Any) -> Optional[str]:
         """解析作者"""

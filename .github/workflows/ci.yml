@@ -25,14 +25,24 @@ jobs:
         run: |
           bash -n scripts/doctor.sh
           bash -n scripts/up.sh
+          bash -n scripts/up-stable.sh
           bash -n scripts/up-groups.sh
+          bash -n scripts/x-latest.sh
+          bash -n scripts/feishu-bot.sh
+          bash -n scripts/install_feishu_launchd.sh
+          bash -n scripts/uninstall_feishu_launchd.sh
 
       - name: Python syntax check
         run: |
+          python -m py_compile overrides/trendradar/crawler/rss/fetcher.py
           python -m py_compile overrides/trendradar/crawler/rss/parser.py
+          python -m py_compile overrides/trendradar/ai/translator.py
           python -m py_compile overrides/trendradar/notification/renderer.py
           python -m py_compile overrides/trendradar/notification/senders.py
           python -m py_compile scripts/build_group_configs.py
+          python -m py_compile scripts/build_shard_configs.py
+          python -m py_compile scripts/x_latest_post.py
+          python -m py_compile scripts/feishu_command_bot.py
 
       - name: YAML sanity check
         run: |
@@ -86,3 +96,13 @@ jobs:
           export WEWORK_WEBHOOK_URL_POLITICS=https://example.invalid/politics
           export WEWORK_WEBHOOK_URL_INVEST=https://example.invalid/invest
           COMPOSE_PROFILES=grouped docker compose config >/dev/null
+
+      - name: Docker Compose sharded profile check
+        run: |
+          cp .env.example .env
+          python scripts/build_shard_configs.py --shards 3
+          COMPOSE_PROFILES=sharded docker compose config >/dev/null
+
+      - name: Unit tests
+        run: |
+          python -m unittest discover -s tests -p "test_*.py" -v
