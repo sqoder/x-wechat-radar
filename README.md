@@ -1,31 +1,25 @@
 # X AI Radar
 
-目标：只监控 AI 圈 X 账号，做到两件事：
+只监控 AI 圈 X 账号，并把新帖推送到企业微信/飞书。  
+默认策略：`实时增量提醒 + 每天 08:00 汇总`，翻译默认关闭。
 
-- 有新帖就尽快推送到企业微信/飞书（1 分钟轮询）
-- 每天早上 08:00 固定推一条汇总
+## 项目架构
 
-并且支持本地免费翻译（Ollama，不走云 API 计费）。
-
-## 项目来源
-
-这个项目是开源组件组合方案：
-
-- `TrendRadar`：抓取、去重、调度、推送
-- `RSSHub`：提供 X 用户 RSS（`twitter/user/:username`）
-- `Docker Compose`：一键编排运行
-- `overrides/trendradar/*`：本仓库对推送与媒体处理的定制
+- TrendRadar：调度、去重、推送
+- RSSHub：X 用户 RSS（`twitter/user/:username`）
+- Docker Compose：一键运行
+- `overrides/trendradar/*`：本仓库定制逻辑
 
 数据流：`X -> RSSHub -> TrendRadar -> 企业微信/飞书`
 
-## 当前默认策略
+## 当前默认配置
 
-- 监控范围：AI-only（42 个账号）
-- 推送节奏：`CRON_SCHEDULE=*/1 * * * *`
+- 账号范围：AI-only（42 个）
+- 轮询频率：`CRON_SCHEDULE=*/1 * * * *`
 - 汇总时间：每天 `08:00`
-- 翻译：默认开启（走本地 Ollama OpenAI 接口）
+- 翻译功能：默认关闭（`config/config.yaml` 里 `ai_translation.enabled: false`）
 
-## 小白快速上手
+## 小白上手
 
 ### 1) 初始化
 
@@ -33,7 +27,7 @@
 cp .env.example .env
 ```
 
-`.env` 至少填写：
+`.env` 至少填这两项：
 
 - `TWITTER_AUTH_TOKEN`
 - `WEWORK_WEBHOOK_URL` 或 `FEISHU_WEBHOOK_URL`
@@ -41,8 +35,9 @@ cp .env.example .env
 ### 2) 获取 X 的 `auth_token`
 
 1. 登录 `x.com`
-2. 开发者工具 -> Application -> Cookies -> `https://x.com`
-3. 找到 `auth_token`，复制值写入 `.env`
+2. 打开开发者工具 -> Application -> Cookies -> `https://x.com`
+3. 找到 `auth_token` 并复制
+4. 填到 `.env`
 
 ![X auth_token Cookie screenshot](./5ba9aeb751faa9bd7f973ce330d1c77d.png)
 
@@ -52,10 +47,10 @@ TWITTER_AUTH_TOKEN=your_auth_token
 
 ### 3) 配置企业微信 webhook
 
-1. 企业微信群 -> 聊天信息
+1. 目标群 -> 聊天信息
 2. 点击 `消息推送`
 3. 配置机器人并复制 webhook
-4. 写入 `.env`
+4. 填到 `.env`
 
 ![WeCom webhook setup screenshot](./ScreenShot_2026-03-07_044844_909.png)
 
@@ -76,97 +71,76 @@ WEWORK_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
 docker logs -f x-trendradar
 ```
 
-## 本地免费翻译（Ollama）
+## 开源翻译模型（可选，默认不启用）
+
+如果你想用免费本地翻译，需要自己下载并运行本地模型，再改配置。
+
+推荐开源模型（示例）：
+
+- `qwen2.5:1.5b`（轻量，先跑通最稳）
+- `qwen2.5:7b`（质量更高，更吃资源）
+- `HY-MT1.5-7B`（需你自己导入到本地推理服务后使用）
+
+推荐接法：Ollama（OpenAI 兼容接口）。
 
 ### 1) 安装并启动 Ollama
 
-macOS 可用：
-
 ```bash
 brew install ollama
-ollama serve
+brew services start ollama
 ```
 
-说明：`ollama serve` 需要常驻运行（可开新终端窗口）。
-
-### 2) 准备翻译模型
-
-你要用 HY 的话，关键是最终在 `ollama list` 里能看到一个模型名，比如：
-
-- `hy-mt1.5-7b`
-
-如果你先只想测试链路，可先拉一个轻量模型：
+### 2) 下载翻译模型（示例）
 
 ```bash
 ollama pull qwen2.5:1.5b
-```
-
-查看本地模型：
-
-```bash
 ollama list
 ```
 
-### 3) 对齐 `.env`（已在 `.env.example` 预置）
+### 3) 修改 `.env`（按你的本地模型名）
 
 ```env
 AI_API_KEY=local_dummy_key
 AI_API_BASE=http://host.docker.internal:11434/v1
-AI_MODEL=openai/HY-MT1.5-7B
+AI_MODEL=openai/qwen2.5:1.5b
 ```
 
-如果你在 Ollama 里实际模型名是 `hy-mt1.5-7b`，建议把 `AI_MODEL` 改为：
+说明：模型名规则是 `AI_MODEL=openai/<ollama中的模型名>`。
 
-```env
-AI_MODEL=openai/hy-mt1.5-7b
+### 4) 打开翻译开关
+
+编辑 `config/config.yaml`，把：
+
+```yaml
+ai_translation:
+  enabled: false
 ```
 
-规则：`AI_MODEL=openai/<ollama中的模型名>`
+改为：
 
-### 4) 重启生效
+```yaml
+ai_translation:
+  enabled: true
+```
+
+### 5) 重启生效
 
 ```bash
 docker compose up -d --force-recreate trendradar
 ```
 
-## 你会收到的消息形态
+## 推送内容说明
 
-- 新帖提醒：按增量推送（有新增就发）
-- 早上 08:00：固定一条当前汇总
-- 图片：可直接推图
-- 视频：以链接/卡片推送（企业微信接口限制）
-
-注：同一分钟内如果多位博主同时发帖，可能会在同一轮一起发出，但不会显示“第1批/第2批”标题。
+- 新帖提醒：有新增就推
+- 每日汇总：08:00 固定一条
+- 图片：直接推图
+- 视频：以链接/卡片推送（平台接口限制）
 
 ## 常用命令
 
 ```bash
-# 启动
 ./scripts/up.sh
-
-# 停止
 docker compose down
-
-# 查看容器状态
 docker compose ps
-
-# 查看主服务日志
 docker logs -f x-trendradar
-```
-
-## 目录
-
-```text
-.
-├── config/
-│   ├── config.yaml
-│   ├── timeline.yaml
-│   └── feed_groups.json
-├── overrides/
-├── scripts/
-│   ├── doctor.sh
-│   ├── up.sh
-│   ├── up-groups.sh
-│   └── build_group_configs.py
-└── docker-compose.yml
 ```

@@ -471,11 +471,11 @@ ai:
   # 完整列表: https://docs.litellm.ai/docs/providers
   # 如果你对于看英文文档比较头疼，那么可以点击页面右下角的 【Ask AI】 ,用中文询问怎么配置 
   
-  model: "openai/HY-MT1.5-7B"
+  model: "deepseek/deepseek-chat"
 
   api_key: ""                       # API Key（建议使用环境变量 AI_API_KEY）
   
-  api_base: "http://host.docker.internal:11434/v1"  # 本地 Ollama OpenAI 兼容接口
+  api_base: ""                      # 自定义 API 端点（可选，大多数情况留空）
                                     # 示例: https://api.openai.com/v1（自建代理或兼容接口）
                                     #
                                     # 💡 超级重要：连接任意兼容 OpenAI 协议的模型商
@@ -582,7 +582,7 @@ ai_analysis:
 # 模型配置见上方 ai 配置段
 # ===============================================================
 ai_translation:
-  enabled: true                     # 是否启用翻译功能（本地 Ollama 也需填占位 AI_API_KEY）
+  enabled: false                    # 是否启用翻译功能（默认关闭，按需开启）
 
   # 翻译目标语言
   # 格式：自然语言描述
