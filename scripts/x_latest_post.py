@@ -7,6 +7,7 @@
 1) 可随时查询任意账号最新帖（如 @realDonaldTrump）
 2) 优先走本地 RSSHub，失败时回退本地 SQLite 历史库
 3) 全部使用本地模型能力（Ollama + 可选 PaddleOCR / faster-whisper）
+4) 支持推送到企业微信或飞书
 """
 
 from __future__ import annotations
@@ -86,13 +87,23 @@ def strip_openai_prefix(model_name: str) -> str:
     return name
 
 
+def _running_in_docker() -> bool:
+    """判断当前进程是否运行在容器内。"""
+    hint = str(os.getenv("RUNNING_IN_DOCKER", "")).strip().lower()
+    if hint in {"1", "true", "yes", "on"}:
+        return True
+    if hint in {"0", "false", "no", "off"}:
+        return False
+    return Path("/.dockerenv").exists()
+
+
 def normalize_ai_base(ai_base: str) -> str:
     base = (ai_base or "").strip()
     if not base:
         return "http://127.0.0.1:11434/v1"
     base = base.rstrip("/")
-    # .env 里常给容器用 host.docker.internal，脚本跑在宿主机时要替换。
-    if "host.docker.internal" in base:
+    # 宿主机脚本无法解析 host.docker.internal，容器内则需要保留该地址。
+    if "host.docker.internal" in base and not _running_in_docker():
         base = base.replace("host.docker.internal", "127.0.0.1")
     return base
 
@@ -499,6 +510,76 @@ def wework_post_json(webhook: str, payload: Dict[str, object]) -> Dict[str, obje
     return data
 
 
+def feishu_post_json(webhook: str, payload: Dict[str, object]) -> Dict[str, object]:
+    resp = requests.post(webhook, json=payload, timeout=30)
+    try:
+        data = resp.json()
+    except Exception:
+        data = {"raw": resp.text[:300]}
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"HTTP {resp.status_code}: {data}")
+    if isinstance(data, dict) and data.get("code") not in (0, None):
+        code = data.get("code")
+        if code == 19007:
+            raise RuntimeError(
+                "Feishu Bot Not Enabled：当前 webhook 非自定义机器人，"
+                "或机器人未启用。请在目标群添加“自定义机器人”并使用其 webhook。"
+            )
+        raise RuntimeError(f"Feishu error: {data}")
+    return data
+
+
+def truncate_utf8(text: str, max_bytes: int = 18000) -> str:
+    raw = (text or "").encode("utf-8")
+    if len(raw) <= max_bytes:
+        return text
+    suffix = "\n...(内容过长，已截断)"
+    suffix_bytes = suffix.encode("utf-8")
+    keep_bytes = max(0, max_bytes - len(suffix_bytes))
+    clipped = raw[:keep_bytes]
+    while clipped:
+        try:
+            return clipped.decode("utf-8") + suffix
+        except UnicodeDecodeError:
+            clipped = clipped[:-1]
+    return suffix
+
+
+def send_to_feishu(*, webhook: str, text_content: str) -> None:
+    feishu_post_json(
+        webhook,
+        {
+            "msg_type": "text",
+            "content": {"text": truncate_utf8(text_content, max_bytes=18000)},
+        },
+    )
+
+
+def resolve_push_target(target: str, *, wework_webhook: str, feishu_webhook: str) -> str:
+    value = str(target or "auto").strip().lower()
+    if value not in {"auto", "wework", "feishu", "both"}:
+        raise ValueError("push target 必须是 auto/wework/feishu/both")
+
+    has_wework = bool(str(wework_webhook or "").strip())
+    has_feishu = bool(str(feishu_webhook or "").strip())
+
+    if value == "auto":
+        if has_feishu:
+            return "feishu"
+        if has_wework:
+            return "wework"
+        raise ValueError("auto 模式下未找到可用 webhook（需配置 FEISHU_WEBHOOK_URL 或 WEWORK_WEBHOOK_URL）")
+
+    if value == "wework" and not has_wework:
+        raise ValueError("push_target=wework 但 WEWORK_WEBHOOK_URL 为空")
+    if value == "feishu" and not has_feishu:
+        raise ValueError("push_target=feishu 但 FEISHU_WEBHOOK_URL 为空")
+    if value == "both" and (not has_wework or not has_feishu):
+        raise ValueError("push_target=both 需要同时配置 WEWORK_WEBHOOK_URL 和 FEISHU_WEBHOOK_URL")
+    return value
+
+
 def send_to_wework(
     *,
     webhook: str,
@@ -541,7 +622,7 @@ def send_to_wework(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="按需查询 X 某账号最新帖子，并可推送到企业微信。"
+        description="按需查询 X 某账号最新帖子，并可推送到企业微信/飞书。"
     )
     parser.add_argument("username", help="X 用户名，可带 @，如 @realDonaldTrump")
     parser.add_argument(
@@ -550,7 +631,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="本地 RSSHub 地址，默认 http://127.0.0.1:1200",
     )
     parser.add_argument("--no-push", action="store_true", help="只在终端打印，不推送到微信")
-    parser.add_argument("--webhook-url", default="", help="企业微信 webhook，默认读取 .env")
+    parser.add_argument(
+        "--webhook-url",
+        "--wework-webhook-url",
+        dest="wework_webhook_url",
+        default="",
+        help="企业微信 webhook，默认读取 .env",
+    )
+    parser.add_argument(
+        "--feishu-webhook-url",
+        default="",
+        help="飞书 webhook，默认读取 .env",
+    )
+    parser.add_argument(
+        "--push-target",
+        choices=["auto", "wework", "feishu", "both"],
+        default="auto",
+        help="推送目标，默认 auto（优先飞书，其次企业微信）",
+    )
     parser.add_argument(
         "--no-translate", action="store_true", help="关闭中文翻译与总结，输出原文"
     )
@@ -571,7 +669,8 @@ def main() -> int:
         return 2
 
     env = load_env_file(ENV_PATH)
-    webhook = args.webhook_url or env.get("WEWORK_WEBHOOK_URL", "").strip()
+    wework_webhook = args.wework_webhook_url or env.get("WEWORK_WEBHOOK_URL", "").strip()
+    feishu_webhook = args.feishu_webhook_url or env.get("FEISHU_WEBHOOK_URL", "").strip()
     ai_base = normalize_ai_base(env.get("AI_API_BASE", ""))
     ai_model = strip_openai_prefix(env.get("AI_MODEL", "qwen2.5:1.5b"))
     ai_key = env.get("AI_API_KEY", "local_dummy_key")
@@ -700,6 +799,10 @@ def main() -> int:
         lines.append(f"图片OCR: {ocr_text}")
     if asr_text:
         lines.append(f"视频ASR: {asr_text}")
+    if post.image_urls:
+        lines.append(f"图片: {post.image_urls[0]}")
+    if post.video_urls:
+        lines.append(f"视频: {post.video_urls[0]}")
     lines.append(f"原帖: {post.url}")
 
     text_content = "\n".join(lines)
@@ -708,25 +811,37 @@ def main() -> int:
     if args.no_push:
         return 0
 
-    if not webhook:
-        print("[ERROR] 未配置 WEWORK_WEBHOOK_URL，无法推送。", file=sys.stderr)
+    try:
+        push_target = resolve_push_target(
+            args.push_target,
+            wework_webhook=wework_webhook,
+            feishu_webhook=feishu_webhook,
+        )
+    except ValueError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
         return 2
 
+    pushed_to: List[str] = []
     try:
-        send_to_wework(
-            webhook=webhook,
-            text_content=text_content,
-            image_bytes=image_bytes,
-            post_url=post.url,
-            video_title=title,
-            video_desc=summary or body[:120],
-            video_has_media=bool(post.video_urls),
-        )
+        if push_target in {"wework", "both"}:
+            send_to_wework(
+                webhook=wework_webhook,
+                text_content=text_content,
+                image_bytes=image_bytes,
+                post_url=post.url,
+                video_title=title,
+                video_desc=summary or body[:120],
+                video_has_media=bool(post.video_urls),
+            )
+            pushed_to.append("企业微信")
+        if push_target in {"feishu", "both"}:
+            send_to_feishu(webhook=feishu_webhook, text_content=text_content)
+            pushed_to.append("飞书")
     except Exception as exc:
         print(f"[ERROR] 推送失败: {exc}", file=sys.stderr)
         return 1
 
-    print("[OK] 已推送到企业微信。")
+    print(f"[OK] 已推送到：{', '.join(pushed_to)}")
     return 0
 
 

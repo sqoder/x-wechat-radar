@@ -36,6 +36,33 @@ read_env_value() {
   printf '%s' "${line#*=}"
 }
 
+env_is_true() {
+  value=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case "$value" in
+    1|true|yes|y|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+cron_is_aggressive() {
+  value=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case "$value" in
+    "* * * * *"|"*/1 * * * *"|"*/2 * * * *"|"*/3 * * * *"|\
+    "0-59/1 * * * *"|"1-59/1 * * * *"|"2-59/1 * * * *"|\
+    "0-59/2 * * * *"|"1-59/2 * * * *"|"2-59/2 * * * *"|\
+    "0-59/3 * * * *"|"1-59/3 * * * *"|"2-59/3 * * * *")
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 config_section_enabled() {
   section=$1
   awk -v target="${section}" '
@@ -95,6 +122,18 @@ else
     pass "AI_API_KEY 非必填（当前 AI 功能均关闭）"
   fi
 
+  media_summary_enabled=$(read_env_value "AI_MEDIA_SUMMARY_ENABLED")
+  if env_is_true "$media_summary_enabled"; then
+    media_summary_key=$(read_env_value "AI_MEDIA_SUMMARY_API_KEY")
+    if [ -n "$media_summary_key" ]; then
+      pass "AI_MEDIA_SUMMARY_API_KEY 已填写（云端媒体总结已启用）"
+    else
+      fail "AI_MEDIA_SUMMARY_ENABLED=true 但 AI_MEDIA_SUMMARY_API_KEY 为空"
+    fi
+  else
+    pass "云端媒体总结未启用（AI_MEDIA_SUMMARY_ENABLED=false）"
+  fi
+
   cron_value=$(read_env_value CRON_SCHEDULE)
   if [ -n "$cron_value" ]; then
     pass "CRON_SCHEDULE=${cron_value}"
@@ -112,15 +151,22 @@ fi
 
 if [ "${feed_count}" -gt 30 ]; then
   cron_value=$(read_env_value CRON_SCHEDULE)
-  if [ -n "$cron_value" ]; then
-    case "$cron_value" in
-      "*/1 * * * *"|"* * * * *")
-        warn "当前 feed 数较多且 CRON_SCHEDULE=${cron_value}，容易超时。建议改为 */3 并使用 ./scripts/up-stable.sh 分片抓取。"
-        ;;
-      *)
-        :
-        ;;
-    esac
+  if [ -n "$cron_value" ] && cron_is_aggressive "$cron_value"; then
+    warn "当前 feed 数较多且 CRON_SCHEDULE=${cron_value}，容易超时。建议使用 */5，并通过 ./scripts/up-stable.sh 分片抓取。"
+  fi
+
+  shard1=$(read_env_value SHARD_CRON_SCHEDULE_1)
+  shard2=$(read_env_value SHARD_CRON_SCHEDULE_2)
+  shard3=$(read_env_value SHARD_CRON_SCHEDULE_3)
+
+  if [ -n "$shard1" ] && cron_is_aggressive "$shard1"; then
+    warn "SHARD_CRON_SCHEDULE_1=${shard1} 偏快，建议使用 0-59/5 * * * *"
+  fi
+  if [ -n "$shard2" ] && cron_is_aggressive "$shard2"; then
+    warn "SHARD_CRON_SCHEDULE_2=${shard2} 偏快，建议使用 1-59/5 * * * *"
+  fi
+  if [ -n "$shard3" ] && cron_is_aggressive "$shard3"; then
+    warn "SHARD_CRON_SCHEDULE_3=${shard3} 偏快，建议使用 2-59/5 * * * *"
   fi
 fi
 

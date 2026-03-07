@@ -20,7 +20,10 @@ import time
 import json
 import base64
 import hashlib
+import hmac
 import html
+import mimetypes
+import os
 import re
 from datetime import datetime
 from email.header import Header
@@ -82,6 +85,320 @@ def _extract_summary_url(summary: str, label: str) -> str:
     if not match:
         return ""
     return html.unescape(match.group(1).strip())
+
+
+def _extract_brief_from_summary(summary: str) -> str:
+    """从 summary 中提取 `摘要: ...` 内容"""
+    if not summary:
+        return ""
+    match = re.search(r"摘要\s*:\s*([^|]+)", summary)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = str(os.getenv(name, "")).strip().lower()
+    if not value:
+        return default
+    return value in {"1", "true", "yes", "y", "on"}
+
+
+def _build_feishu_signature_fields() -> Dict[str, str]:
+    """
+    构建飞书自定义机器人签名字段（可选）。
+
+    当 FEISHU_WEBHOOK_SECRET 为空时，返回空字典，保持兼容。
+    """
+    secret = str(os.getenv("FEISHU_WEBHOOK_SECRET", "")).strip()
+    if not secret:
+        return {}
+
+    timestamp = str(int(time.time()))
+    string_to_sign = f"{timestamp}\n{secret}"
+    sign = base64.b64encode(
+        hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+    ).decode("utf-8")
+    return {"timestamp": timestamp, "sign": sign}
+
+
+def _get_media_summary_config() -> Dict[str, Any]:
+    """读取媒体总结配置（云端多模态模型）"""
+    return {
+        "enabled": _env_bool("AI_MEDIA_SUMMARY_ENABLED", False),
+        "provider": str(os.getenv("AI_MEDIA_SUMMARY_PROVIDER", "gemini")).strip().lower(),
+        "api_key": str(os.getenv("AI_MEDIA_SUMMARY_API_KEY", "")).strip(),
+        "model": str(os.getenv("AI_MEDIA_SUMMARY_MODEL", "gemini-2.5-flash")).strip(),
+        "timeout": int(str(os.getenv("AI_MEDIA_SUMMARY_TIMEOUT", "45")).strip() or "45"),
+        "max_items": int(str(os.getenv("AI_MEDIA_SUMMARY_MAX_ITEMS", "3")).strip() or "3"),
+        "max_download_mb": int(
+            str(os.getenv("AI_MEDIA_SUMMARY_MAX_DOWNLOAD_MB", "20")).strip() or "20"
+        ),
+        "cache_file": Path(
+            str(
+                os.getenv(
+                    "AI_MEDIA_SUMMARY_CACHE_FILE", "/app/output/ai_media_summary_cache.json"
+                )
+            ).strip()
+            or "/app/output/ai_media_summary_cache.json"
+        ),
+        "cache_max_entries": int(
+            str(os.getenv("AI_MEDIA_SUMMARY_CACHE_MAX_ENTRIES", "10000")).strip() or "10000"
+        ),
+    }
+
+
+_MEDIA_SUMMARY_CACHE: Dict[str, str] = {}
+_MEDIA_SUMMARY_CACHE_LOADED = False
+
+
+def _load_media_summary_cache(cache_file: Path) -> None:
+    global _MEDIA_SUMMARY_CACHE_LOADED, _MEDIA_SUMMARY_CACHE
+    if _MEDIA_SUMMARY_CACHE_LOADED:
+        return
+    _MEDIA_SUMMARY_CACHE_LOADED = True
+    try:
+        if not cache_file.exists():
+            _MEDIA_SUMMARY_CACHE = {}
+            return
+        data = json.loads(cache_file.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            _MEDIA_SUMMARY_CACHE = {str(k): str(v) for k, v in data.items()}
+        else:
+            _MEDIA_SUMMARY_CACHE = {}
+    except Exception:
+        _MEDIA_SUMMARY_CACHE = {}
+
+
+def _save_media_summary_cache(cache_file: Path, max_entries: int) -> None:
+    try:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        if len(_MEDIA_SUMMARY_CACHE) > max_entries:
+            keys = list(_MEDIA_SUMMARY_CACHE.keys())[-max_entries:]
+            trimmed = {k: _MEDIA_SUMMARY_CACHE[k] for k in keys}
+            _MEDIA_SUMMARY_CACHE.clear()
+            _MEDIA_SUMMARY_CACHE.update(trimmed)
+        cache_file.write_text(
+            json.dumps(_MEDIA_SUMMARY_CACHE, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+def _build_media_cache_key(entry: Dict[str, Any], media_url: str, model: str) -> str:
+    post_url = str(entry.get("url", "") or "").strip()
+    base = f"{model}|{post_url}|{media_url}"
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()
+
+
+def _download_media_with_limit(
+    media_url: str,
+    timeout: int,
+    max_download_mb: int,
+) -> Optional[Dict[str, Any]]:
+    max_bytes = max(1, max_download_mb) * 1024 * 1024
+    response = requests.get(
+        media_url,
+        stream=True,
+        headers={"User-Agent": WEWORK_USER_AGENT},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+
+    content = bytearray()
+    for chunk in response.iter_content(chunk_size=64 * 1024):
+        if not chunk:
+            continue
+        content.extend(chunk)
+        if len(content) > max_bytes:
+            return None
+
+    content_type = str(response.headers.get("Content-Type", "")).strip().split(";")[0].lower()
+    if not content_type:
+        guessed, _ = mimetypes.guess_type(media_url)
+        content_type = (guessed or "").lower()
+
+    if not content_type:
+        content_type = "application/octet-stream"
+
+    return {"bytes": bytes(content), "mime_type": content_type}
+
+
+def _gemini_media_summary(
+    *,
+    api_key: str,
+    model: str,
+    timeout: int,
+    media_bytes: bytes,
+    mime_type: str,
+    prompt: str,
+) -> str:
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        f"?key={api_key}"
+    )
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": base64.b64encode(media_bytes).decode("utf-8"),
+                        }
+                    },
+                    {"text": prompt},
+                ]
+            }
+        ],
+        "generationConfig": {"temperature": 0.2},
+    }
+    response = requests.post(endpoint, json=payload, timeout=timeout)
+    response.raise_for_status()
+    data = response.json()
+
+    candidates = data.get("candidates") or []
+    if not candidates:
+        return ""
+    content = candidates[0].get("content") or {}
+    parts = content.get("parts") or []
+    texts = [str(part.get("text", "")).strip() for part in parts if part.get("text")]
+    return " ".join([t for t in texts if t]).strip()
+
+
+def _summarize_media_entry(
+    *,
+    entry: Dict[str, Any],
+    media_url: str,
+    media_type: str,
+    cfg: Dict[str, Any],
+) -> str:
+    _load_media_summary_cache(cfg["cache_file"])
+    cache_key = _build_media_cache_key(entry, media_url=media_url, model=cfg["model"])
+    cached = _MEDIA_SUMMARY_CACHE.get(cache_key, "")
+    if cached:
+        return cached
+
+    media_data = _download_media_with_limit(
+        media_url=media_url,
+        timeout=cfg["timeout"],
+        max_download_mb=cfg["max_download_mb"],
+    )
+    if not media_data:
+        return f"媒体文件超过 {cfg['max_download_mb']}MB，跳过自动总结。"
+
+    title = str(entry.get("title", "") or "").strip()
+    summary = str(entry.get("summary", "") or "").strip()
+    post_url = str(entry.get("url", "") or "").strip()
+    brief = _extract_brief_from_summary(summary)
+
+    prompt = (
+        "你是中文内容编辑。请基于给定媒体内容输出 1-2 句中文总结（30-90字），"
+        "不要编造看不到的信息。输出纯文本，不要加标题。\n"
+        f"帖子标题: {title or '无'}\n"
+        f"帖子摘要: {brief or '无'}\n"
+        f"媒体类型: {media_type}\n"
+        f"原帖链接: {post_url or '无'}"
+    )
+
+    if cfg["provider"] != "gemini":
+        return ""
+
+    result = _gemini_media_summary(
+        api_key=cfg["api_key"],
+        model=cfg["model"],
+        timeout=cfg["timeout"],
+        media_bytes=media_data["bytes"],
+        mime_type=str(media_data["mime_type"] or "application/octet-stream"),
+        prompt=prompt,
+    )
+
+    if result:
+        if cache_key in _MEDIA_SUMMARY_CACHE:
+            _MEDIA_SUMMARY_CACHE.pop(cache_key, None)
+        _MEDIA_SUMMARY_CACHE[cache_key] = result
+        _save_media_summary_cache(cfg["cache_file"], cfg["cache_max_entries"])
+    return result
+
+
+def _append_media_summary(entry: Dict[str, Any], media_summary: str) -> None:
+    if not media_summary:
+        return
+    summary = str(entry.get("summary", "") or "").strip()
+    if "媒体总结:" in summary:
+        return
+    if summary:
+        entry["summary"] = f"{summary} | 媒体总结: {media_summary}"
+    else:
+        entry["summary"] = f"媒体总结: {media_summary}"
+
+
+def _augment_rss_media_summaries(
+    *,
+    rss_items: Optional[list],
+    rss_new_items: Optional[list],
+    log_prefix: str,
+) -> None:
+    """对 RSS 中带图片/视频的条目做云端多模态总结，回填到 summary"""
+    cfg = _get_media_summary_config()
+    if not cfg["enabled"]:
+        return
+    if not cfg["api_key"]:
+        print(f"{log_prefix}媒体总结已启用但未配置 AI_MEDIA_SUMMARY_API_KEY，跳过")
+        return
+
+    entries: List[Dict[str, Any]] = []
+    seen = set()
+    for blocks in [rss_new_items, rss_items]:
+        for entry in _iter_rss_title_entries(blocks):
+            summary = str(entry.get("summary", "") or "").strip()
+            if not summary:
+                continue
+            image_url = _extract_summary_url(summary, "图片")
+            video_url = _extract_summary_url(summary, "视频")
+            if not image_url and not video_url:
+                continue
+            key = str(entry.get("url", "") or "").strip() or f"{video_url}|{image_url}"
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            entries.append(entry)
+
+    if not entries:
+        return
+
+    max_items = max(1, cfg["max_items"])
+    success = 0
+    attempted = 0
+    for entry in entries:
+        if attempted >= max_items:
+            break
+        summary = str(entry.get("summary", "") or "").strip()
+        image_url = _extract_summary_url(summary, "图片")
+        video_url = _extract_summary_url(summary, "视频")
+        media_url = video_url or image_url
+        media_type = "video" if video_url else "image"
+        if not media_url:
+            continue
+        attempted += 1
+        try:
+            media_summary = _summarize_media_entry(
+                entry=entry,
+                media_url=media_url,
+                media_type=media_type,
+                cfg=cfg,
+            )
+            if media_summary:
+                _append_media_summary(entry, media_summary[:220])
+                success += 1
+        except Exception as e:
+            print(f"{log_prefix}媒体总结失败: {e}")
+
+    print(
+        f"{log_prefix}媒体总结完成：尝试 {attempted} 条，成功 {success} 条 "
+        f"(provider={cfg['provider']}, model={cfg['model']})"
+    )
 
 
 def _post_wework_payload(
@@ -370,6 +687,13 @@ def send_to_feishu(
     # 日志前缀
     log_prefix = f"飞书{account_label}" if account_label else "飞书"
 
+    # 可选：云端多模态媒体总结（图片/视频）
+    _augment_rss_media_summaries(
+        rss_items=rss_items,
+        rss_new_items=rss_new_items,
+        log_prefix=log_prefix,
+    )
+
     # 渲染 AI 分析内容（如果有）
     ai_content = None
     ai_stats = None
@@ -421,6 +745,7 @@ def send_to_feishu(
                 "text": batch_content,
             },
         }
+        payload.update(_build_feishu_signature_fields())
 
         try:
             response = requests.post(
@@ -629,6 +954,13 @@ def send_to_wework(
 
     # 日志前缀
     log_prefix = f"企业微信{account_label}" if account_label else "企业微信"
+
+    # 可选：云端多模态媒体总结（图片/视频）
+    _augment_rss_media_summaries(
+        rss_items=rss_items,
+        rss_new_items=rss_new_items,
+        log_prefix=log_prefix,
+    )
 
     # 获取消息类型配置（markdown 或 text）
     is_text_mode = msg_type.lower() == "text"

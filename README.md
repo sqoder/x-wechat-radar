@@ -1,265 +1,231 @@
 # X AI Radar
 
-只监控 AI 圈 X 账号，并把新帖推送到企业微信/飞书。  
-默认策略：`实时增量提醒 + 每天 08:00 汇总`，翻译默认开启（可关闭）。
+把你关注的 X（Twitter）账号自动抓取下来，翻译/总结后推送到飞书或企业微信。
 
-## 项目架构
+默认策略：
+- 实时增量推送（有新帖就推）
+- 每天 08:00 固定汇总
 
-- TrendRadar：调度、去重、推送
-- RSSHub：X 用户 RSS（`twitter/user/:username`）
-- Docker Compose：一键运行
-- `overrides/trendradar/*`：本仓库定制逻辑
+适合场景：
+- 不想频繁刷 X，只看消息推送
+- 重点关注 AI 圈账号动态
+- 需要“私聊机器人查询某人最新帖”
 
-数据流：`X -> RSSHub -> TrendRadar -> 企业微信/飞书`
+## 项目能做什么
 
-## 当前默认配置
+- 监控 42 个 AI 账号（默认配置）
+- 定时抓取：RSSHub + TrendRadar（去重/调度/推送）
+- 推送通道：飞书 webhook、企业微信 webhook
+- 飞书机器人对话：私聊/群聊里发命令查询最新帖
+- 文本增强：中文翻译、摘要、标签
+- 媒体支持：图片/视频链接推送；可选 OCR/ASR（本地）或云端媒体总结
 
-- 账号范围：AI-only（42 个）
-- 轮询频率：`CRON_SCHEDULE=*/3 * * * *`（稳定模式建议）
-- 汇总时间：每天 `08:00`
-- 翻译功能：默认开启（`config/config.yaml` 里 `ai_translation.enabled: true`）
-- 帖子增强：自动提取 `标签 + 摘要 + 图片/视频链接`
+## 架构说明
 
-## 你会收到什么
+主链路（自动推送）：
+`X -> RSSHub -> TrendRadar -> Feishu/WeCom webhook`
 
-- 实时新帖：有人发新帖就推送
-- 每日汇总：每天 08:00 一条“当前汇总”
-- 文本增强：每条附带 `标签` 和 `摘要`
-- 媒体增强：图片直发；视频卡片/链接推送（企业微信接口限制）
-- 中文能力：打开 `ai_translation` 后可自动中文翻译
+对话链路（飞书机器人）：
+`飞书消息 -> feishu_command_bot -> RSSHub/Nitter/SQLite回退 -> 飞书回复`
 
-## 小白上手
+组件职责：
+- `rsshub`：把 X 账号转成 RSS 源
+- `trendradar`：拉取 RSS、去重、调度、渲染、推送
+- `feishu-command-bot`：处理“查看xxx最新动态”这类聊天命令
+- `overrides/trendradar/*`：项目自定义逻辑（翻译、渲染、推送增强）
 
-### 1) 初始化
+详细版本见：
+- [docs/ARCHITECTURE_CN.md](./docs/ARCHITECTURE_CN.md)
+
+## 3 分钟上手（给克隆用户）
+
+### 1) 环境要求
+
+- Docker / Docker Compose
+- Python 3.10+（用于脚本与测试）
+
+### 2) 初始化配置
 
 ```bash
+cd x-wechat-radar
 cp .env.example .env
 ```
 
-`.env` 至少填这两项：
-
+至少填写：
 - `TWITTER_AUTH_TOKEN`
-- `WEWORK_WEBHOOK_URL` 或 `FEISHU_WEBHOOK_URL`
+- `FEISHU_WEBHOOK_URL` 或 `WEWORK_WEBHOOK_URL`（至少一个）
 
-### 2) 获取 X 的 `auth_token`
+如果要用飞书“私聊机器人对话”，还要填：
+- `FEISHU_APP_ID`
+- `FEISHU_APP_SECRET`
 
-1. 登录 `x.com`
-2. 打开开发者工具 -> Application -> Cookies -> `https://x.com`
-3. 找到 `auth_token` 并复制
-4. 填到 `.env`
-
-![X auth_token Cookie screenshot](./5ba9aeb751faa9bd7f973ce330d1c77d.png)
-
-```env
-TWITTER_AUTH_TOKEN=your_auth_token
-```
-
-### 3) 配置企业微信 webhook
-
-1. 目标群 -> 聊天信息
-2. 点击 `消息推送`
-3. 配置机器人并复制 webhook
-4. 填到 `.env`
-
-![WeCom webhook setup screenshot](./ScreenShot_2026-03-07_044844_909.png)
-
-```env
-WEWORK_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
-```
-
-### 4) 启动
+### 3) 启动前体检
 
 ```bash
 ./scripts/doctor.sh
-./scripts/up.sh
+```
+
+### 4) 推荐启动方式（42 账号稳定模式）
+
+```bash
+./scripts/up-stable.sh
+COMPOSE_PROFILES=feishu-bot docker compose up -d feishu-command-bot
 ```
 
 查看日志：
 
 ```bash
-docker logs -f x-trendradar
+docker logs -f x-trendradar-shard1
+docker logs -f x-feishu-command-bot
 ```
 
-稳定抓取推荐（42 账号）：
+## 关键配置（.env）
+
+必填项：
+- `TWITTER_AUTH_TOKEN`：X 登录 cookie 的 `auth_token`
+- `AI_API_KEY`：当 `ai_translation.enabled=true` 时必填
+
+推送相关：
+- `FEISHU_WEBHOOK_URL`：飞书群机器人 webhook（自动推送）
+- `WEWORK_WEBHOOK_URL`：企业微信群机器人 webhook（自动推送）
+- `FEISHU_WEBHOOK_SECRET`：飞书 webhook 开启签名校验时填写
+
+飞书对话机器人：
+- `FEISHU_APP_ID`
+- `FEISHU_APP_SECRET`
+- `FEISHU_BOT_ENABLE_TRANSLATE=true|false`
+
+调度相关（建议值）：
+- `CRON_SCHEDULE=*/5 * * * *`
+- `SHARD_CRON_SCHEDULE_1=0-59/5 * * * *`
+- `SHARD_CRON_SCHEDULE_2=1-59/5 * * * *`
+- `SHARD_CRON_SCHEDULE_3=2-59/5 * * * *`
+
+## 两种使用方式
+
+### A. 自动推送（不用聊天）
+
+只依赖 webhook（飞书群或企微群）：
 
 ```bash
 ./scripts/up-stable.sh
 ```
 
-说明：`up-stable.sh` 会自动做 3 分片错峰抓取，显著降低 RSSHub 超时与 503。
+系统会自动：
+- 实时推送新增帖子
+- 每天 08:00 推送一次当前汇总
 
-如果你想关闭翻译，把 `config/config.yaml` 里的 `ai_translation.enabled` 改成 `false`，再重启容器。
-
-## 开源翻译模型（推荐）
-
-如果你想用免费本地翻译，需要自己下载并运行本地模型，再改配置。
-
-推荐开源模型（示例）：
-
-- `qwen2.5:1.5b`（轻量，先跑通最稳）
-- `qwen2.5:7b`（质量更高，更吃资源）
-- `HY-MT1.5-7B`（需你自己导入到本地推理服务后使用）
-
-推荐接法：Ollama（OpenAI 兼容接口）。
-
-### 1) 安装并启动 Ollama
+### B. 飞书私聊机器人（可以直接问）
 
 ```bash
-brew install ollama
-brew services start ollama
+COMPOSE_PROFILES=feishu-bot docker compose up -d feishu-command-bot
 ```
 
-### 2) 下载翻译模型（示例）
+私聊或群聊命令示例：
+- `查看openai最新的动态`
+- `我要看马斯克最新帖子`
+- `查看 @realDonaldTrump 最新推特`
+
+本地自测（不连飞书）：
 
 ```bash
-ollama pull qwen2.5:1.5b
-ollama list
+./scripts/feishu-bot.sh --self-test "查看openai最新的动态"
 ```
 
-### 3) 修改 `.env`（按你的本地模型名）
-
-```env
-AI_API_KEY=local_dummy_key
-AI_API_BASE=http://host.docker.internal:11434/v1
-AI_MODEL=openai/qwen2.5:1.5b
-```
-
-说明：模型名规则是 `AI_MODEL=openai/<ollama中的模型名>`。
-
-### 4) 检查翻译开关（默认已开）
-
-确认 `config/config.yaml` 为：
-
-```yaml
-ai_translation:
-  enabled: true
-```
-
-### 5) 重启生效
+## 按需查询脚本（命令行）
 
 ```bash
-docker-compose up -d --force-recreate trendradar
-```
+# 只查不推送
+./scripts/x-latest.sh OpenAI --no-push
 
-## 推送内容说明
+# 推送目标自动选择（优先飞书，其次企微）
+./scripts/x-latest.sh OpenAI
 
-- 默认推送字段：标题 + 原帖链接 + 标签 + 摘要
-- 图片：直接推图
-- 视频：以链接/卡片推送（平台接口限制）
-- 开启翻译后：以上内容都会按目标语言翻译（链接、@用户名、#标签会保留原样）
+# 强制推送到飞书
+./scripts/x-latest.sh OpenAI --push-target feishu
 
-## 按需查询任意账号（随时查特朗普等）
-
-支持手动查询任意 X 用户最新帖子，并直接推到你的微信（企业微信机器人）。
-
-```bash
-# 查询并推送
-./scripts/x-latest.sh realDonaldTrump
-
-# 只看终端结果，不推送
-./scripts/x-latest.sh realDonaldTrump --no-push
+# 同时推送到飞书和企业微信
+./scripts/x-latest.sh OpenAI --push-target both
 ```
 
 可选增强：
 
 ```bash
-# 图片 OCR（免费本地，需安装 paddleocr）
-./scripts/x-latest.sh realDonaldTrump --with-ocr
+# 图片 OCR
+./scripts/x-latest.sh OpenAI --with-ocr
 
-# 视频语音转写（免费本地，需安装 faster-whisper + ffmpeg）
-./scripts/x-latest.sh realDonaldTrump --with-asr
+# 视频 ASR
+./scripts/x-latest.sh OpenAI --with-asr
 ```
 
-说明：
-- 这是“主动查询”能力，适合你临时想看某个人最新帖。
-- 脚本会自动按顺序回退：`RSSHub -> Nitter RSS -> 本地SQLite历史库`。
-- 如果是“纯视频/纯图片且几乎无正文”的帖子，会给出稳定说明，不会胡乱编造翻译。
-- 企业微信 webhook 是单向推送，不支持在群里@机器人后让它回你。要做“聊天问答式”需要企业微信回调服务（单独开发）。
+## 推送内容说明
 
-## 飞书聊天指令机器人（0 元本地）
+默认字段：
+- 标题
+- 摘要
+- 标签
+- 原帖链接
+- 图片/视频链接（如有）
 
-如果你要“在飞书里直接发命令，机器人自动回最新帖子”，用这个：
+翻译开关：
+- 在 `config/config.yaml` 中控制 `ai_translation.enabled`
 
-### 1) 在飞书开发者后台创建应用
+## 项目结构
 
-- 开启机器人能力
-- 开启事件订阅并选择“长连接模式”（不需要公网回调 URL）
-- 订阅事件：`im.message.receive_v1`
-- 给应用权限（至少）：
-  - 读取消息内容相关权限
-  - 发送消息相关权限
-- 把机器人加到你的群里
-
-### 2) 填写 `.env`
-
-```env
-FEISHU_APP_ID=cli_xxx
-FEISHU_APP_SECRET=xxx
-FEISHU_BOT_RSS_BASE=http://127.0.0.1:1200
-FEISHU_BOT_ENABLE_TRANSLATE=true
+```text
+x-wechat-radar/
+├── config/                         # 主配置（账号、时间线、提示词）
+├── overrides/trendradar/           # 对上游 TrendRadar 的定制补丁
+├── scripts/                        # 启动/体检/分片/查询/机器人脚本
+├── tests/                          # 单元测试
+├── docker-compose.yml              # 服务编排
+├── .env.example                    # 环境变量模板
+├── output/                         # 运行产物（数据库/HTML报告）
+└── logs/                           # 机器人日志
 ```
 
-### 3) 安装依赖并启动
+## 故障排查 Top 5
 
-```bash
-python3 -m pip install --user lark-oapi
-./scripts/feishu-bot.sh
-```
+1. 飞书报 `Bot Not Enabled`  
+说明你填的不是“群自定义机器人 webhook”，或机器人未启用。
 
-Docker 常驻模式（可选）：
+2. 没收到“实时推送”  
+先看日志是否有新增条目：`docker logs -f x-trendradar-shard1`。
 
-```bash
-COMPOSE_PROFILES=feishu-bot docker-compose up -d feishu-command-bot
-docker logs -f x-feishu-command-bot
-```
+3. RSSHub 超时/503  
+使用 `./scripts/up-stable.sh` 分片模式，避免单实例过载。
 
-macOS launchd 常驻模式（可选）：
+4. 翻译失败回退原文  
+检查 `.env` 的 `AI_API_KEY / AI_API_BASE / AI_MODEL` 是否可用。
 
-```bash
-./scripts/install_feishu_launchd.sh
-launchctl print gui/$UID/com.xwechatradar.feishu.bot
-```
+5. 飞书私聊机器人不回消息  
+检查 `FEISHU_APP_ID/FEISHU_APP_SECRET`，并看 `docker logs -f x-feishu-command-bot`。
 
-### 4) 在飞书群里发命令
+## 测试与 CI
 
-- `查 elonmusk 最新帖子`
-- `查看 @realDonaldTrump 最新推特`
-- `我要看马斯克最新帖子`
-
-本地自测（不连飞书）：
-
-```bash
-./scripts/feishu-bot.sh --self-test "我要看马斯克最新推特"
-```
-
-## 0 元本地 OCR/ASR（可选）
-
-本项目可做到纯本地免费运行（不调用云 API）。你只需按需安装本地依赖：
-
-```bash
-brew install ffmpeg
-python3 -m pip install --user paddleocr paddlepaddle faster-whisper
-```
-
-然后配合 `./scripts/x-latest.sh` 的 `--with-ocr` / `--with-asr` 即可启用。
-
-## 最小测试集
+本地最小验证：
 
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py" -v
+docker compose config -q
 ```
 
-## 常用命令
+CI 文件：`/.github/workflows/ci.yml`  
+已覆盖 shell/python 语法、YAML 校验、compose 校验、单测。
 
-```bash
-./scripts/up.sh
-./scripts/up-stable.sh
-docker-compose down
-docker-compose ps
-docker logs -f x-trendradar
-docker logs -f x-trendradar-shard1
-./scripts/x-latest.sh realDonaldTrump
-./scripts/feishu-bot.sh
-./scripts/install_feishu_launchd.sh
-./scripts/uninstall_feishu_launchd.sh
-```
+## 安全建议
+
+- `.env` 不要提交到 GitHub（已在 `.gitignore` 忽略）
+- 定期轮换 webhook/token
+- 公开仓库只保留 `.env.example`
+
+## 发布到 GitHub
+
+完整步骤见：
+- [docs/GITHUB_UPLOAD_CN.md](./docs/GITHUB_UPLOAD_CN.md)
+
+## 下一步建议（可选）
+
+- 增加“每日 08:05 健康报告”（抓取数/推送数/失败数）
+- 给翻译结果加缓存（按 status_id 去重）
+- 企业微信“私聊机器人回调模式”（复杂度高于 webhook）

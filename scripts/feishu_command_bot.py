@@ -17,10 +17,11 @@ import logging
 import os
 import re
 import sys
+from collections import deque
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Deque, Dict, Optional, Set, Tuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -49,6 +50,10 @@ HELP_TEXT = (
     "2) 查看 @realDonaldTrump 最新推特\n"
     "3) 我要看马斯克最新帖子\n"
 )
+
+MAX_SEEN_MESSAGE_IDS = 2000
+SEEN_MESSAGE_IDS: Set[str] = set()
+SEEN_MESSAGE_QUEUE: Deque[str] = deque(maxlen=MAX_SEEN_MESSAGE_IDS)
 
 
 ALIAS_MAP = {
@@ -93,7 +98,7 @@ def build_config(env: Dict[str, str]) -> BotConfig:
 
 
 def extract_username(command_text: str) -> Optional[str]:
-    text = (command_text or "").strip()
+    text = normalize_command_text(command_text)
     if not text:
         return None
     lowered = text.lower()
@@ -122,6 +127,39 @@ def extract_username(command_text: str) -> Optional[str]:
     if re.fullmatch(r"[A-Za-z0-9_]{1,30}", text):
         return text
     return None
+
+
+def normalize_command_text(command_text: str) -> str:
+    text = str(command_text or "")
+    text = re.sub(r"<at\b[^>]*>.*?</at>", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"@_user_\d+", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def is_query_text(command_text: str) -> bool:
+    text = normalize_command_text(command_text)
+    if not text:
+        return False
+    if extract_username(text):
+        return True
+    return bool(
+        re.search(r"(查|查看|看看|查询|获取|我要看|最新|推特|帖子|动态|tweet|x)", text, flags=re.IGNORECASE)
+    )
+
+
+def mark_message_seen(message_id: str) -> bool:
+    value = str(message_id or "").strip()
+    if not value:
+        return False
+    if value in SEEN_MESSAGE_IDS:
+        return True
+    if len(SEEN_MESSAGE_QUEUE) == MAX_SEEN_MESSAGE_IDS:
+        dropped = SEEN_MESSAGE_QUEUE.popleft()
+        SEEN_MESSAGE_IDS.discard(dropped)
+    SEEN_MESSAGE_QUEUE.append(value)
+    SEEN_MESSAGE_IDS.add(value)
+    return False
 
 
 def fetch_latest_post(username: str, rss_base: str) -> Tuple[Optional[PostItem], str]:
@@ -219,7 +257,6 @@ def build_reply_text(post: PostItem, cfg: BotConfig) -> str:
 def make_handler(cfg: BotConfig):
     import lark_oapi as lark
     from lark_oapi.api.im.v1 import (
-        P2ImMessageReceiveV1,
         ReplyMessageRequest,
         ReplyMessageRequestBody,
     )
@@ -241,29 +278,50 @@ def make_handler(cfg: BotConfig):
         response = client.im.v1.message.reply(request)
         if not response.success():
             logging.error("reply failed: code=%s msg=%s", response.code, response.msg)
+            return
+        logging.info("reply sent: message_id=%s", message_id)
 
-    def do_message(data: P2ImMessageReceiveV1) -> None:
+    def do_message(data) -> None:
         event = data.event
         if not event or not event.message:
             return
         message = event.message
+        if mark_message_seen(getattr(message, "message_id", "")):
+            logging.info("duplicate message ignored: id=%s", getattr(message, "message_id", ""))
+            return
+        chat_type = getattr(message, "chat_type", "") or getattr(event, "chat_type", "")
+        logging.info(
+            "incoming message: id=%s type=%s chat_type=%s",
+            message.message_id,
+            message.message_type,
+            chat_type or "unknown",
+        )
         if message.message_type != "text":
+            logging.info("non-text message ignored: id=%s", message.message_id)
             reply(message.message_id, "请发文本命令。\n" + HELP_TEXT)
             return
 
         try:
             content_obj = json.loads(message.content or "{}")
-            text = str(content_obj.get("text", "")).strip()
+            text = normalize_command_text(str(content_obj.get("text", "")).strip())
         except Exception:
             text = ""
+        logging.info("incoming text: id=%s text=%s", message.message_id, text[:120])
+
+        chat_type_lower = str(chat_type or "").strip().lower()
+        if chat_type_lower in {"group", "chat"} and not is_query_text(text):
+            logging.info("non-query group message ignored: id=%s", message.message_id)
+            return
 
         username = extract_username(text)
         if not username:
+            logging.info("username not recognized: id=%s", message.message_id)
             reply(message.message_id, "没识别到账号。\n" + HELP_TEXT)
             return
 
         post, source = fetch_latest_post(username=username, rss_base=cfg.rss_base)
         if not post:
+            logging.warning("post not found: username=%s", username)
             reply(
                 message.message_id,
                 f"未找到 @{username} 最新帖子（已尝试 RSSHub/Nitter/本地缓存）。",
@@ -272,13 +330,16 @@ def make_handler(cfg: BotConfig):
 
         text_reply = build_reply_text(post, cfg)
         reply(message.message_id, text_reply)
-        logging.info("handled query username=%s source=%s", username, source)
+        logging.info("handled query: username=%s source=%s", username, source)
 
-    event_handler = (
-        lark.EventDispatcherHandler.builder("", "")
-        .register_p2_im_message_receive_v1(do_message)
-        .build()
-    )
+    builder = lark.EventDispatcherHandler.builder("", "")
+    if hasattr(builder, "register_im_message_receive_v1"):
+        builder = builder.register_im_message_receive_v1(do_message)
+        logging.info("event handler registered: im_message_receive_v1 (group+p2)")
+    else:
+        builder = builder.register_p2_im_message_receive_v1(do_message)
+        logging.info("event handler registered: im_message_receive_v1 (SDK alias: register_p2_im_message_receive_v1)")
+    event_handler = builder.build()
     return event_handler
 
 
